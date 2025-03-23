@@ -2,7 +2,8 @@ For a structured Raspberry Pi project, follow this approach:
 
 1. Project Structure
 
-'bash
+```
+
 /AutoFarmSystem
 │── /src                # Source code folder
 │   │── main.py         # Main execution script
@@ -15,7 +16,8 @@ For a structured Raspberry Pi project, follow this approach:
 │── /docs               # Documentation
 │── README.md           # Project overview and setup guide
 │── requirements.txt    # Python dependencies
-'
+```
+
 
 
 2. Breaking Code into Modules
