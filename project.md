@@ -1,11 +1,8 @@
 For a structured Raspberry Pi project, follow this approach:
 
 1. Project Structure
-A good structure keeps your code modular and easy to maintain. Here’s a recommended layout:
 
-bash
-Copy
-Edit
+'bash
 /AutoFarmSystem
 │── /src                # Source code folder
 │   │── main.py         # Main execution script
@@ -18,6 +15,9 @@ Edit
 │── /docs               # Documentation
 │── README.md           # Project overview and setup guide
 │── requirements.txt    # Python dependencies
+'
+
+
 2. Breaking Code into Modules
 main.py → Runs the system, calls functions from other files.
 
