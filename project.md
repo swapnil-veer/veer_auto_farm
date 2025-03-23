@@ -4,18 +4,21 @@ For a structured Raspberry Pi project, follow this approach:
 
 ```
 
-/AutoFarmSystem
-│── /src                # Source code folder
-│   │── main.py         # Main execution script
-│   │── sensors.py      # Code for reading sensors (current, phase monitor, etc.)
-│   │── relays.py       # Code for controlling relays
-│   │── display.py      # Code for LCD display handling
-│   │── gsm.py          # Code for SIM800L communication
-│   │── config.py       # Configuration file (GPIO mappings, settings)
-│── /logs               # Log files for debugging
-│── /docs               # Documentation
-│── README.md           # Project overview and setup guide
-│── requirements.txt    # Python dependencies
+veer_auto_farm/  
+│── README.md  
+│── autofarmsystem/  
+│   │── main.py               # Main script to run the system  
+│   │── config.py             # Configuration file (GPIO pins, thresholds)  
+│   │── hardware/             # Hardware interaction modules  
+│   │   │── lcd_display.py    # LCD control  
+│   │   │── sensors.py        # Sensor reading (ZMCT103C, Phase Monitor)  
+│   │   │── relays.py         # Relay control functions  
+│   │── communication/        # Communication modules  
+│   │   │── sim800l.py        # SIM800L SMS module  
+│   │── utils/                # Helper functions  
+│   │   │── logger.py         # Logging system events  
+│   │── requirements.txt      # Dependencies  
+│   │── setup.sh              # Setup script (install dependencies, configure system)  
 ```
 
 
