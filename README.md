@@ -1,5 +1,4 @@
 # veer_auto_farm
-Raspberry Pi based Auto Farm System
 # Raspberry Pi-Based Auto Farm System
 
 ## Overview
@@ -42,7 +41,7 @@ The full wiring schematic is included in **fritzing\_schematic.fzz**.
 
 1. Clone the repository:
    ```sh
-   git clone https://github.com/your-repo-name.git
+   git clone https://github.com/veer_auto_farm.git
    cd your-repo-name
    ```
 2. Install dependencies:
