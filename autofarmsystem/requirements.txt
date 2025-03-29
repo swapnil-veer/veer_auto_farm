@@ -1,0 +1,4 @@
+gsm0338==1.0.0
+pyserial==3.5
+sim800l-gsm-module==1.0.1
+six==1.17.0
