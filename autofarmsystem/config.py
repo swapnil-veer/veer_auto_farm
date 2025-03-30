@@ -9,7 +9,3 @@ GPIO_PINS = {
     "bypass_switch" :11,            # DPST Switch 2A (BCM 11, Pin 23)
 }
 
-UART_PINS = {
-    "sim800l_tx": 15,  # SIM800L TX -> Raspberry Pi RX (BCM 15, Pin 10)
-    "sim800l_rx": 14   # SIM800L RX -> Raspberry Pi TX (BCM 14, Pin 8)
-}
