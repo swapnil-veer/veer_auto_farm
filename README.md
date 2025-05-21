@@ -22,7 +22,7 @@ This project is a **GSM/GPRS-controlled auto farm system** built using a **Raspb
 
 ## Wiring Diagram
 
-The full wiring schematic is included in **fritzing\_schematic.fzz**.
+![alt text](schematic/auto-farm-schematic.png)
 
 ### Key GPIO Connections:
 
