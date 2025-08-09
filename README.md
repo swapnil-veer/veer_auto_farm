@@ -63,6 +63,59 @@ This project is a **GSM/GPRS-controlled auto farm system** built using a **Raspb
 - **Motor Control**: The system controls relays connected to GPIO 16 (Pi On/Off Relay) and GPIO 18 (Dry-Run Relay) to automate motor operations.
 - **LCD Display**: Displays real-time system status.
 
+## Project Versioning Roadmap
+
+We are following a phased development approach. Each version has multiple phases.  
+
+### Version 0 — Core Power + Basic Motor Control
+**Goal:** Safely power the system and achieve reliable motor ON/OFF control with manual override and logging.
+#### Phase 1 — Power & Safety Setup
+- [ ] Assemble power module (AC/DC adapter → buck converter → Pi 5V, motor 4V/relay)  
+- [ ] Add smoothing capacitors, fuses, and protection diodes  
+- [ ] Wire battery + BMS for backup power  
+- [ ] Connect dry-run sensor wiring (not yet automated in code)  
+- [ ] Test Pi boot stability on both adapter and battery  
+**Acceptance Criteria:**  
+- Pi runs for ≥2 hours on battery without reboot  
+- Relays don’t chatter  
+- Protection circuits functional  
+#### Phase 2 — Motor Control by Pi
+- [ ] Connect motor relay to Pi GPIO  
+- [ ] Add manual ON/OFF switch in parallel  
+- [ ] Python script to toggle motor ON/OFF  
+- [ ] Log ON/OFF events to CSV  
+- [ ] Manually test dry-run detection  
+**Acceptance Criteria:**  
+- Pi toggles motor reliably  
+- Manual override works  
+- Logs contain correct timestamps  
+
+### Version 1 — Scheduling & local automation
+- **Deliverables:** scheduling engine on Pi (cron or scheduler), simple UI or config file for schedules, logs retained.
+- **Acceptance:** scheduled operations run and are logged; manual override still works.
+
+### Version 2 — Remote I/O (ESP32) + wiring consolidation
+- **Deliverables:** ESP32 at valve/filter location acting as remote I/O (relays for valves, solenoid, digital inputs), Pi sends commands over Wi-Fi; robust connector/cable layout.
+- **Acceptance:** Pi can command valve open/close via ESP32 and get status back; local wiring reduced and tidy; fail-safe on comms loss.
+
+### Version 3 — Filter automation (convert semi-auto → automated)
+- **Deliverables:** solenoid flush + motor control integrated; limit switches or pressure-switch + comparator for fail-safe; ESP32 handles execution (local controller) but Pi schedules.
+- **Acceptance:** automated flush cycle triggers on pressure threshold or on schedule; manual override available; no damage to filter in repeated cycles.
+
+### Version 4 — Fertigation (pilot)
+- **Deliverables:** fertigation pump/venturi control, recipe implementation (Pi), local execution via ESP32, safety interlocks (low-flow/pressure checks).
+- **Acceptance:** a controlled trial run of fertigation with logs and rollback; confirmation of dosing accuracy.
+
+### Version 5 — Full integration & pipeline changes
+- **Deliverables:** finalize wiring, mechanical upgrades, central logs + backup, analytics pipeline (export to Google Sheets initially), documentation, maintenance checklist.
+- **Acceptance:** system runs an end-to-end irrigation cycle with scheduled filter cleaning, valves working, and logged data; remote alerts enabled.
+
+### Deployment Process
+1. Develop & test in **Test Environment** (test hardware + test branch in Git).  
+2. Review all functionality against acceptance criteria.  
+3. Merge tested code into **Production Environment** (main branch + live hardware).  
+4. Tag Git commit with version number (e.g., `v1.0-phase2`).  
+
 ## Future Improvements
 
 - **Optimize power consumption**
