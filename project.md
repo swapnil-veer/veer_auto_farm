@@ -5,53 +5,103 @@ For a structured Raspberry Pi project, follow this approach:
 ```
 
 veer_auto_farm/  
-│── README.md  
-│── autofarmsystem/  
-│   │── main.py               # Main script to run the system  
-│   │── config.py             # Configuration file (GPIO pins, thresholds)  
-│   │── hardware/             # Hardware interaction modules  
-│   │   │── lcd_display.py    # LCD control  
-│   │   │── sensors.py        # Sensor reading (ZMCT103C, Phase Monitor)  
-│   │   │── relays.py         # Relay control functions  
-│   │── communication/        # Communication modules  
-│   │   │── sim800l.py        # SIM800L SMS module  
-│   │── utils/                # Helper functions  
-│   │   │── logger.py         # Logging system events  
-│   │── requirements.txt      # Dependencies  
-│   │── setup.sh              # Setup script (install dependencies, configure system)  
+│
+├── README.md                          # Overview of the project
+├── requirements.txt                   # Python dependencies
+├── LICENSE                            # License file
+│
+├── IoT_Hub_Main_controller/           # Centralized IoT Hub Controller
+│   ├── components_list.xlsx           # Components for IoT Hub
+│   ├── circuit_diagrams/              # Diagrams for IoT Hub
+│   ├── src/
+│   │   ├── main.py                    # Main IoT Hub code
+│   │   ├── config.py                  # All configurations (pins, thresholds)
+│   │   ├── modules/                   # Modules used by IoT Hub
+│   │   │   ├── gsm_module/
+│   │   │   │   ├── gsm.py
+│   │   │   │   ├── test_gsm.py
+│   │   │   ├── lcd_display/
+│   │   │   │   ├── lcd.py
+│   │   │   │   ├── test_lcd.py
+│   │   ├── utils/                     # Common helper functions
+│   │   ├── tests/                     # IoT Hub level test scripts
+│
+├── RTUs/                              # All Remote Terminal Units
+│   ├── pump_control_RTU/              # RTU for Pump control & sensing
+│   │   ├── components_list.xlsx
+│   │   ├── circuit_diagrams/
+│   │   ├── src/
+│   │   │   ├── pump_main.py
+│   │   │   ├── config.py
+│   │   │   ├── modules/               # If pump RTU has submodules
+│   │   │   ├── utils/
+│   │   │   ├── tests/
+│   │
+│   ├── Valve_control_RTU/             # RTU for irrigation sensors
+│   │   ├── components_list.xlsx
+│   │   ├── circuit_diagrams/
+│   │   ├── src/
+│   │   │   ├── irri_main.py
+│   │   │   ├── config.py
+│   │   │   ├── modules/
+│   │   │   ├── utils/
+│   │   │   ├── tests/
+│   │
+│   ├── filter_cleaner_RTU/            # RTU for filter automation
+│   │   ├── ...
+│
+│   ├── ferti_RTU/                     # RTU for fertigation
+│       ├── ...
+│
+└── global_tests/                      # System-level integration tests
+    ├── end_to_end_test.py
+  
 ```
 
+2. Project Structure Explanation
+### IoT_Hub (Central Controller)
 
+- main.py → Runs the IoT Hub logic, manages communication with RTUs, and coordinates system behavior.
 
-2. Breaking Code into Modules
-main.py → Runs the system, calls functions from other files.
+- config.py → Stores GPIO pins, LoRa/GSM settings, thresholds, and other constants.
 
-sensors.py → Handles input from current sensors and phase monitor.
+- gsm_module/gsm.py → Handles GSM communication (SIM800L), sends SMS alerts, status updates, and remote commands.
 
-relays.py → Controls relays based on sensor inputs.
+- lcd_display/lcd.py → Updates the LCD with real-time system status and error messages.
 
-display.py → Updates LCD with system status.
+- utils/ → Helper functions for logging, error handling, and common utilities used across modules.
 
-gsm.py → Sends alerts via SIM800L.
+- tests/ → Scripts for testing IoT Hub features (e.g., GSM connectivity, LCD rendering).
 
-config.py → Stores GPIO pins and other constants.
+### RTUs (Remote Terminal Units)
 
-3. Python Virtual Environment (Optional but Recommended)
+Each RTU follows a similar modular structure, customized to its function.
+
+- #### pump_control_RTU
+
+- #### Valve_control_RTU
+
+- #### filter_cleaner_RTU
+
+- #### ferti_RTU
+
+**end_to_end_test.py** → Simulates entire system operation, including IoT Hub + all RTUs communication, GSM alerts, LoRa tests, and fail-safe handling.
+
+1. Python Virtual Environment (Optional but Recommended)
 This ensures dependency isolation:
 
-bash
-Copy
-Edit
+```
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
 4. Running the Script
 Once everything is set up, run:
 
-bash
-Copy
-Edit
-python3 src/main.py
+```
+python3 src/main.py 
+```
+
 This modular approach helps with debugging, reusability, and scalability.
 
 
