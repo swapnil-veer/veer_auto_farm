@@ -1,14 +1,20 @@
 import serial
 import time
 import re
+from dotenv import load_dotenv
+import os
+
+ph_no_1 = os.getenv("ph_no_1")
+ph_no_2 = os.getenv("ph_no_2")
+
 
 #Define serial port
 # SERIAL_PORT = "/dev/serial0" # for raspberry pi
 SERIAL_PORT = "COM3"  # Example: "COM3" (Windows) or "/dev/ttyUSB0" (Linux)
 BAUD_RATE = 9600
 ALLOWED_NOS = {
-            "primary": "+917038835527",   # Primary Number
-            "secondary": ["+919921776490", "+xxxxxxxx"]  # Example Secondary Numbers
+            "primary": ph_no_1,   # Primary Number
+            "secondary": [ph_no_2, "+xxxxxxxx"]  # Example Secondary Numbers
         }
 
 
