@@ -1,6 +1,6 @@
 import config
 from phase_monitor import PhaseMonitor
-from lcd_display import LCD
+from IoT_Hub_Main_controller.src.modules.lcd_display.lcd_module import LCD
 import time
 
 class MotorControl:
