@@ -1,0 +1,22 @@
+name : ci-cd pipeline 
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches : ["dev", "test", "main"]
+
+jobs:
+  # 1. Software-only tests (always run)
+  software-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Run Unit Tests
+        run: pytest tests/unit
+
+      - name: Run Mock Hardware Tests
+        run: pytest tests/mocks
+
