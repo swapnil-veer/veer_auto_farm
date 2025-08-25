@@ -1,35 +1,40 @@
-import serial
+import os
 import time
 import re
+import serial
+
 from dotenv import load_dotenv
-import os
+
+load_dotenv()
 
 ph_no_1 = os.getenv("ph_no_1")
 ph_no_2 = os.getenv("ph_no_2")
 
-
-#Define serial port
-# SERIAL_PORT = "/dev/serial0" # for raspberry pi
-SERIAL_PORT = "COM3"  # Example: "COM3" (Windows) or "/dev/ttyUSB0" (Linux)
+# Define serial port
+SERIAL_PORT = "/dev/serial0"  # for raspberry pi
+# SERIAL_PORT = "COM3"  # Example: "COM3" (Windows) or "/dev/ttyUSB0" (Linux)
 BAUD_RATE = 9600
-ALLOWED_NOS = {
-            "primary": ph_no_1,   # Primary Number
-            "secondary": [ph_no_2, "+xxxxxxxx"]  # Example Secondary Numbers
-        }
 
 
 class SIM800L:
-    def __init__(self, port,baud_rate, timeout = 1 ):
-                """
+    """Class for SIM800L GSM Module operations"""
+
+    ALLOWED_NOS = {
+        "primary": ph_no_1,  # Primary Number
+        "secondary": [ph_no_2, "+xxxxxxxx"],  # Example Secondary Numbers
+    }
+
+    def __init__(self, port=SERIAL_PORT, baud_rate=BAUD_RATE, timeout=1):
+        """
         Initialize serial communication with SIM800L module.
         :param port: Serial port (e.g., /dev/serial0 for Raspberry Pi)
         :param baud_rate: Communication speed (default 9600)
         :param timeout: Time to wait for response
         """
-        self.ser = serial.Serial(port, baud_rate, timeout=timeout)    
+        self.ser = serial.Serial(port, baud_rate, timeout=timeout)
 
-    def send_command(self, command, delay = 1):
-                """
+    def send_command(self, command, delay=1):
+        """
         Sends an AT command to the SIM800L module.
         :param command: AT command string (without '\r\n')
         :param wait: Time to wait for response (in seconds)
@@ -37,8 +42,8 @@ class SIM800L:
         """
         self.ser.write((command + "\r\n").encode())
         time.sleep(delay)
-        response = self.ser.read(ser.inWating()).decode("utf-8")
-        return respose.strip()
+        response = self.ser.read(self.ser.inWaiting()).decode("utf-8")
+        return response.strip()
 
     def check_connection(self):
         """
@@ -59,42 +64,44 @@ class SIM800L:
             strength, _ = values.strip().split(",")
             return int(strength) * 2 - 113  # Convert to dBm
         return None
-    
+
     def get_caller_id(self):
-                """
+        """
         Reads the caller ID when a call is received.
         Returns the phone number if found, else None.
         """
-        response = self.send_command("AT+CLCC", wait=2)  # Get caller info
+        response = self.send_command("AT+CLCC", delay=2)  # Get caller info
         match = re.search(r'"\+(\d+)"', response)
         return f"+{match.group(1)}" if match else None
 
-        def send_sms(self, phone_number, message):
+    def send_sms(self, phone_number, message):
         """
         Sends an SMS only to an authorized number.
         """
-        if phone_number not in [ALLOWED_NOS["primary"]] + ALLOWED_NOS["secondary"]:
+        if phone_number not in (
+            [self.ALLOWED_NOS["primary"]] or self.ALLOWED_NOS["secondary"]
+        ):
             print(f"Unauthorized SMS attempt to {phone_number}")
             return "Error: Unauthorized number"
 
         self.send_command(f'AT+CMGS="{phone_number}"')
         time.sleep(0.5)
-        self.ser.write((message + "\x1A").encode())  # \x1A = End of message
+        self.ser.write((message + "\x1a").encode())  # \x1A = End of message
         time.sleep(3)
-        response = self.ser.read(self.ser.inWaiting()).decode(errors='ignore')
+        response = self.ser.read(self.ser.inWaiting()).decode(errors="ignore")
         return response.strip()
 
     def read_sms(self, index):
-            """
-            Reads SMS at a specific index.
-            Returns sender number & message text.
-            """
-            response = self.send_command(f"AT+CMGR={index}", wait=2)
-            match = re.search(r'\+CMGR:.*?"(\+\d+)",.*?\n(.*)', response, re.DOTALL)
-            if match:
-                sender, message = match.groups()
-                return sender.strip(), message.strip()
-            return None, None
+        """
+        Reads SMS at a specific index.
+        Returns sender number & message text.
+        """
+        response = self.send_command(f"AT+CMGR={index}", delay=2)
+        match = re.search(r'\+CMGR:.*?"(\+\d+)",.*?\n(.*)', response, re.DOTALL)
+        if match:
+            sender, message = match.groups()
+            return sender.strip(), message.strip()
+        return None, None
 
     def check_new_sms(self):
         """
@@ -102,28 +109,31 @@ class SIM800L:
         """
         valid_messages = []
 
-        response = self.send_command("AT+CMGL=\"REC UNREAD\"", wait=2)
-        messages = re.findall(r'\+CMGL: (\d+),.*?"(\+\d+)",.*?\n(.*)', response, re.DOTALL)
+        response = self.send_command('AT+CMGL="REC UNREAD"', delay=2)
+        messages = re.findall(
+            r'\+CMGL: (\d+),.*?"(\+\d+)",.*?\n(.*)', response, re.DOTALL
+        )
 
         for index, sender, message in messages:
             sender = sender.strip()
             message = message.strip()
-            
+
             if sender in [self.ALLOWED_NOS["primary"]] + self.ALLOWED_NOS["secondary"]:
                 print(f"✅ Authorized SMS received from {sender}: {message}")
                 valid_messages.append((sender, message))  # Forward to Raspberry Pi
             else:
                 print(f"❌ Unauthorized SMS from {sender}: Ignored")
-            
+
             # Delete the processed message to avoid re-processing
-            self.send_at_command(f"AT+CMGD={index}")
+            self.send_command(f"AT+CMGD={index}")
+
+
 # Test Connection
 if __name__ == "__main__":
     print("Sending AT Command...")
-    response = send_command("AT")  # Basic command to check communication
+    a = SIM800L()
+    response = a.send_command("AT")  # Basic command to check communication
     print("Response:", response)
-
-
 
 
 # #Basic AT Commands
@@ -168,4 +178,3 @@ if __name__ == "__main__":
 # "AT+CFUN=1"               # Full functionality mode
 # "AT+CSCLK=1"              # Enable sleep mode
 # "AT+CSCLK=0"              # Disable sleep mode
-
