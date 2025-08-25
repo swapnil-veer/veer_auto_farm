@@ -2,8 +2,11 @@ import os
 import time
 import re
 import serial
+import logging
+
 
 from dotenv import load_dotenv
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -31,7 +34,12 @@ class SIM800L:
         :param baud_rate: Communication speed (default 9600)
         :param timeout: Time to wait for response
         """
-        self.ser = serial.Serial(port, baud_rate, timeout=timeout)
+        try:
+            self.ser = serial.Serial(port, baud_rate, timeout=timeout)
+            logger.info(f"Connected to SIM800L on {port} at {baud_rate} baud.")
+        except serial.SerialException as e:
+            logger.error(f"Failed to initialize SIM800L: {e}")
+            return None
 
     def send_command(self, command, delay=1):
         """
@@ -40,10 +48,15 @@ class SIM800L:
         :param wait: Time to wait for response (in seconds)
         :return: Response from the module
         """
-        self.ser.write((command + "\r\n").encode())
-        time.sleep(delay)
-        response = self.ser.read(self.ser.inWaiting()).decode("utf-8")
-        return response.strip()
+        try:
+            self.ser.write((command + "\r\n").encode())
+            time.sleep(delay)
+            response = self.ser.read(self.ser.inWaiting()).decode("utf-8")
+            logger.debug(f"Command: {command} | Response: {response.strip()}")
+            return response.strip()
+        except Exception as e:
+            logger.error(f"failing to sending command '{command}': {e}")
+            return None
 
     def check_connection(self):
         """
@@ -51,7 +64,12 @@ class SIM800L:
         :return: True if module responds with 'OK', else False
         """
         response = self.send_command("AT")
-        return "OK" in response
+        if response and "OK" in response:
+            logger.info("SIM800L is responding.")
+            return True
+        else:
+            logger.warning("SIM800L is not responding.")
+            return False
 
     def get_signal_strength(self):
         """
@@ -62,7 +80,10 @@ class SIM800L:
         if "+CSQ" in response:
             _, values = response.split(":")
             strength, _ = values.strip().split(",")
-            return int(strength) * 2 - 113  # Convert to dBm
+            dBm = int(strength) * 2 - 113
+            logger.info(f"Signal strength: {dBm} dBm")
+            return dBm  # Convert to dBm
+        logger.warning("Failed to get signal strength.")
         return None
 
     def get_caller_id(self):
@@ -72,7 +93,12 @@ class SIM800L:
         """
         response = self.send_command("AT+CLCC", delay=2)  # Get caller info
         match = re.search(r'"\+(\d+)"', response)
-        return f"+{match.group(1)}" if match else None
+        caller_id = f"+{match.group(1)}" if match else None
+        if caller_id:
+            logger.info(f"Incoming call from {caller_id}")
+        else:
+            logger.warning("Caller ID not found.")
+        return caller_id
 
     def send_sms(self, phone_number, message):
         """
@@ -81,14 +107,16 @@ class SIM800L:
         if phone_number not in (
             [self.ALLOWED_NOS["primary"]] or self.ALLOWED_NOS["secondary"]
         ):
-            print(f"Unauthorized SMS attempt to {phone_number}")
+            logger.warning(f"Unauthorized SMS attempt to {phone_number}")
             return "Error: Unauthorized number"
 
+        logger.info(f"Sending SMS to {phone_number}: {message}")
         self.send_command(f'AT+CMGS="{phone_number}"')
         time.sleep(0.5)
         self.ser.write((message + "\x1a").encode())  # \x1A = End of message
         time.sleep(3)
         response = self.ser.read(self.ser.inWaiting()).decode(errors="ignore")
+        logger.debug(f"SMS Response: {response.strip()}")
         return response.strip()
 
     def read_sms(self, index):
@@ -100,7 +128,9 @@ class SIM800L:
         match = re.search(r'\+CMGR:.*?"(\+\d+)",.*?\n(.*)', response, re.DOTALL)
         if match:
             sender, message = match.groups()
+            logger.info(f"Read SMS from {sender}: {message}")
             return sender.strip(), message.strip()
+        logger.warning(f"No SMS found at index {index}.")
         return None, None
 
     def check_new_sms(self):
@@ -119,10 +149,10 @@ class SIM800L:
             message = message.strip()
 
             if sender in [self.ALLOWED_NOS["primary"]] + self.ALLOWED_NOS["secondary"]:
-                print(f"✅ Authorized SMS received from {sender}: {message}")
+                logger.info(f"Authorized SMS received from {sender}: {message}")
                 valid_messages.append((sender, message))  # Forward to Raspberry Pi
             else:
-                print(f"❌ Unauthorized SMS from {sender}: Ignored")
+                logger.warning(f"Unauthorized SMS from {sender}: Ignored")
 
             # Delete the processed message to avoid re-processing
             self.send_command(f"AT+CMGD={index}")
@@ -140,7 +170,7 @@ if __name__ == "__main__":
 # "AT"                # Check if SIM800L is responding (Returns: OK)
 # "AT+GMR"           # Get module firmware version
 # "AT+CFUN=1"        # Set full functionality mode
-# "AT+CPIN?"         # Check SIM card status (Returns: READY if SIM is inserted)
+# "AT+CPIN?"        # Check SIM card status (Returns: READY if SIM is inserted)
 # "AT+CSQ"           # Check signal strength (Returns: +CSQ: <rssi>,<ber>)
 # "AT+COPS?"         # Get current network operator
 # "AT+CREG?"         # Check network registration status
