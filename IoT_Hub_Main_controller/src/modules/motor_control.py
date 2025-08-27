@@ -42,7 +42,7 @@ class MotorControl:
         """Start pump and monitor phases while running (private)."""
         if not phase_status["green"]:
             logger.warning("Cannot start pump. Green phase not available.")
-            return
+            self.pump_wait(duration)   # this is invoke wait function
 
         # Activate pump
         GPIO.output(self.pump_pin, GPIO.HIGH)
