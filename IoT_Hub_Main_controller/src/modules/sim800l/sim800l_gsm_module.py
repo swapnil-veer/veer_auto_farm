@@ -23,8 +23,8 @@ class SIM800L:
     """Class for SIM800L GSM Module operations"""
 
     ALLOWED_NOS = {
-        "primary": ph_no_1,  # Primary Number
-        "secondary": [ph_no_2, "+xxxxxxxx"],  # Example Secondary Numbers
+        "admin": ph_no_1,  # admin Number
+        "secondary": ph_no_2,  # Example Secondary Numbers
     }
 
     def __init__(self, port=SERIAL_PORT, baud_rate=BAUD_RATE, timeout=1):
@@ -105,7 +105,7 @@ class SIM800L:
         Sends an SMS only to an authorized number.
         """
         if phone_number not in (
-            [self.ALLOWED_NOS["primary"]] or self.ALLOWED_NOS["secondary"]
+            [self.ALLOWED_NOS["admin"]] or self.ALLOWED_NOS["secondary"]
         ):
             logger.warning(f"Unauthorized SMS attempt to {phone_number}")
             return "Error: Unauthorized number"
@@ -139,7 +139,7 @@ class SIM800L:
         """
         valid_messages = []
 
-        response = self.send_command('AT+CMGL="REC UNREAD"', delay=2)
+        response = self.send_command('AT+CMGL=\"ALL\"', delay=2)
         messages = re.findall(
             r'\+CMGL: (\d+),.*?"(\+\d+)",.*?\n(.*)', response, re.DOTALL
         )
@@ -148,14 +148,23 @@ class SIM800L:
             sender = sender.strip()
             message = message.strip()
 
-            if sender in [self.ALLOWED_NOS["primary"]] + self.ALLOWED_NOS["secondary"]:
+            if sender in self.ALLOWED_NOS.values():
                 logger.info(f"Authorized SMS received from {sender}: {message}")
-                valid_messages.append((sender, message))  # Forward to Raspberry Pi
+                # {index: "", sender : "", message = "'"}
+                temp_dict= {}
+                temp_dict["sender"] = sender
+                temp_dict["index"] = index
+                temp_dict["msg"] = message
+                valid_messages.append(temp_dict)
+
+                # valid_messages[sender]= message  # Forward to Raspberry Pi
             else:
-                logger.warning(f"Unauthorized SMS from {sender}: Ignored")
+                logger.info(f"Unauthorized SMS from {sender}: Ignored")
 
             # Delete the processed message to avoid re-processing
             self.send_command(f"AT+CMGD={index}")
+        return valid_messages
+
 
 
 # Test Connection
