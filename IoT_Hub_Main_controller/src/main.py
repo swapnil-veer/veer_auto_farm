@@ -1,7 +1,7 @@
 import config
 import threading
 from modules.phase_monitor import phase_status, PhaseMonitor
-from IoT_Hub_Main_controller.src.modules.lcd_display.lcd_module import LCD
+from modules.lcd_display.lcd_module import LCD
 from modules.sim800l.sim800l_gsm_module import SIM800L
 from modules.motor_control import MotorControl
 import time
