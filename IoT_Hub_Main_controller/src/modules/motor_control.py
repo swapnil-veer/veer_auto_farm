@@ -1,6 +1,6 @@
 import config
-from phase_monitor import phase_status, PhaseMonitor
-from IoT_Hub_Main_controller.src.modules.lcd_display.lcd_module import LCD
+from modules.phase_monitor import phase_status, PhaseMonitor
+from modules.lcd_display.lcd_module import LCD
 import time
 from logging_config import logger
 import RPi.GPIO as GPIO
@@ -30,7 +30,7 @@ class MotorControl:
         logger.info("Pump turned OFF.")
         self.lcd.display_message("Pump OFF")
 
-    def pump_wait(self, duration= self.duration):
+    def pump_wait(self, duration ):
         """Wait for green phase to become True, then start pump in a thread."""
         logger.info("Pump waiting for green phase...")
         self.state = "waiting"
@@ -41,7 +41,7 @@ class MotorControl:
             time.sleep(1)
         self._pump_on(duration=duration)
 
-    def start_pump_thread(self, duration = self.duration):
+    def start_pump_thread(self, duration ):
         """Start _pump_on in a separate thread (public method)."""
         if self._pump_thread and self._pump_thread.is_alive():
             # Stop existing pump thread before starting new
@@ -51,7 +51,7 @@ class MotorControl:
         self._pump_thread = threading.Thread(target=self._pump_on, args=(duration,))
         self._pump_thread.start()
 
-    def _pump_on(self, duration=self.duration):
+    def _pump_on(self, duration):
         """Start pump and monitor phases while running (private)."""
         self._stop_event.clear()
         if not phase_status["green"]:
