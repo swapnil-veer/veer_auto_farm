@@ -7,9 +7,9 @@ from modules.motor_control import MotorControl
 import time
 from logging_config import logger
 from modules.sim800l.sim800l_gsm_module import SIM800L
-from modules.sim800l.sms_processor import sms_listener
+from modules.sim800l.sms_processor import sms_listener, command_queue
 
-
+lcd = LCD()
 sim800l = SIM800L()
 config.setup_gpio()
 
@@ -48,9 +48,10 @@ if __name__ == "__main__":
 
     # Start threads
     t1 = threading.Thread(target=sms_listener, daemon=True)
+    t2 = threading.Thread(target=command_processor, daemon=True)
 
     t1.start()
-    command_processor()
+    t2.start()
 
     # Keep main thread alive
     while True:
