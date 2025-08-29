@@ -8,7 +8,6 @@ import threading
 
 DEFAULT_DURATION = 30
 
-
 class MotorControl:
     def __init__(self):
         """Initialize Motor Control and LCD."""
@@ -25,16 +24,17 @@ class MotorControl:
 
     def pump_off(self):
         """Turn off pump and log the event."""
+        self._stop_event.set()  # signal stop
         GPIO.output(self.pump_pin, GPIO.LOW)
         self.state = "off"
         logger.info("Pump turned OFF.")
-        self.lcd.display_message("Pump OFF")
+        self.lcd.display("Pump OFF")
 
     def pump_wait(self, duration ):
         """Wait for green phase to become True, then start pump in a thread."""
         logger.info("Pump waiting for green phase...")
         self.state = "waiting"
-        while not self.phase_status["green"]:
+        while not phase_status["green"]:
             if self._stop_event.is_set():
                 self.state = "off"
                 return None  # indicates stop
@@ -61,13 +61,14 @@ class MotorControl:
         GPIO.output(self.pump_pin, GPIO.HIGH)
         logger.info(f"Pump started. Will run for {duration} seconds unless fault detected.")
         self.state = "on"
-        self.lcd.display_message("Pump ON")
+        self.lcd.display("Pump ON")
 
         start_time = time.time()
         while time.time() - start_time < duration:
             if self._stop_event.is_set():
                 break
             elif phase_status["red"]:  # Fault detected
+                break
                 logger.error("Phase fault detected! Stopping pump immediately.")
                 self.pump_off()
                 remaining_time = duration - (time.time() - start_time)
