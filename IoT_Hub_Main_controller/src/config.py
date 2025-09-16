@@ -22,6 +22,12 @@ def setup_gpio():
         elif data["type"] == "input":
             GPIO.setup(data["pin"], GPIO.IN)
 
+def set_high(pin):
+    GPIO.outpuT(pin, GPIO.HIGH)
+
+def set_low(pin):
+    GPIO.output(pin, GPIO.LOW)
+
 def cleanup_gpio():
     """Cleanup GPIO on exit."""
     GPIO.cleanup()
