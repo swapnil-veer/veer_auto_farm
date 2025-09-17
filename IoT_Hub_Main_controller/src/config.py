@@ -23,7 +23,7 @@ def setup_gpio():
             GPIO.setup(data["pin"], GPIO.IN)
 
 def set_high(pin):
-    GPIO.outpuT(pin, GPIO.HIGH)
+    GPIO.output(pin, GPIO.HIGH)
 
 def set_low(pin):
     GPIO.output(pin, GPIO.LOW)

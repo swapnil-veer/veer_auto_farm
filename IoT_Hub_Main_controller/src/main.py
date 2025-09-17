@@ -10,7 +10,7 @@ from modules.pump_control import pump_manager
 from command_processor import processor_thread, processor
 
 
-sim800l = SIM800L()
+# sim800l = SIM800L()
 config.setup_gpio()
 
 # processor
@@ -65,8 +65,10 @@ if __name__ == "__main__":
     pump_manager.set_power(True)
     time.sleep(10)  # Run for 10 sec
     pump_manager.set_power(False)  # Power loss, should pause and rewrite
-    time.sleep(2)
+    time.sleep(10)
     pump_manager.set_power(True)  # Power back, continue
+    processor.add_command(10)
+    processor.add_command(15)
     time.sleep(10) 
     # Keep main thread alive
     while True:

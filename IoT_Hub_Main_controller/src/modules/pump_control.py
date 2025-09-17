@@ -2,8 +2,7 @@ import time
 from contextlib import contextmanager
 from config import GPIO_PINS, set_high, set_low
 
-pump_manager = PumpManager()
-pump_context_manager = PumpContextManager(pump_manager)
+
 
 class PumpContextManager:
     """
@@ -38,13 +37,13 @@ class PumpManager:
         """Turn relay on."""
         print("Relay turned ON")
         self.relay_state = 'ON'
-        # set_high(self.pump_pin)
+        set_high(self.pump_pin)
 
     def relay_off(self):
         """Turn relay off."""
         print("Relay turned OFF")
         self.relay_state = 'OFF'
-        # set_low(self.pump_pin)
+        set_low(self.pump_pin)
 
     def set_power(self, state: bool):
         """Set power state."""
@@ -53,3 +52,5 @@ class PumpManager:
     def get_pump_state(self):
         return self.state
 
+pump_manager = PumpManager()
+pump_context_manager = PumpContextManager(pump_manager)

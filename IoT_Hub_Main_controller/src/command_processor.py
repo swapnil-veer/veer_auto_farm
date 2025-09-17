@@ -1,8 +1,7 @@
 import time
 from modules.pump_control import pump_context_manager, pump_manager
 
-processor = CommandProcessor(pump_manager)
-processor_thread = processor.run
+
 
 class CommandProcessor:
     """
@@ -10,7 +9,7 @@ class CommandProcessor:
     Uses context manager for safe relay operations.
     Runs a continuous polling loop.
     """
-    def __init__(self, pump_manager, poll_interval=1):
+    def __init__(self, pump_manager, poll_interval=5):
         self.pump_manager = pump_manager
         self.command_queue = []  # List of dicts: [{'duration_sec': 300, 'remaining_sec': 300, 'in_progress': False, 'start_time': None}, ...]
         self.current_command = None  # Currently processing dict
@@ -27,6 +26,10 @@ class CommandProcessor:
         }
         self.command_queue.append(command_dict)
         print(f"Command added: {command_dict}")
+    
+    def _print_command(self, command_dict, phase):
+        """Helper to print command at a specific phase."""
+        print(f"{phase}: {command_dict}")
 
     def _process_current_command(self):
         """Process the current command if power is available."""
@@ -97,6 +100,9 @@ class CommandProcessor:
     def stop(self):
         """Stop the processor."""
         self.is_running = False
+
+processor = CommandProcessor(pump_manager)
+processor_thread = processor.run
 
 # # Example usage
 # if __name__ == "__main__":
