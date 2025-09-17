@@ -15,7 +15,6 @@ pytest==8.4.1
 python-dotenv==1.1.1
 PyYAML==6.0.2
 RPLCD==1.4.0
-serial==0.0.97
 sim800l-gsm-module==1.0.1
 six==1.17.0
 smbus2==0.5.0

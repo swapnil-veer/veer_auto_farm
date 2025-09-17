@@ -3,6 +3,8 @@ myenv/
 Venv/
 ENV/
 env/
+venv1/
+farm_env/
 *.pyc
 __pycache__/
 
