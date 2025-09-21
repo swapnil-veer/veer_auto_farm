@@ -1,5 +1,7 @@
 import config
 import threading
+from settings import SENSORS
+from file_manager import log_sensors
 from modules.phase_monitor import LedMonitor
 from modules.lcd_display.lcd_module import LCD
 # from modules.motor_control import MotorControl
@@ -13,6 +15,7 @@ from command_processor import processor_thread, processor
 # sim800l = SIM800L()
 config.setup_gpio()
 LedMonitor(poll_interval=1)
+log_sensors(sensors=SENSORS)
 
 # processor
 # pump_manager

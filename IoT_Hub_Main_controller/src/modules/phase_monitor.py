@@ -2,8 +2,15 @@ import config
 import RPi.GPIO as GPIO
 import time
 import threading
+from datetime import datetime
 from logging_config import logger
-from global_var import sensor_data
+
+phase_data = {
+    'timestamp':datetime.now().strftime("%Y-%m-%d %H:%M:%S"),    
+    'green_led': 0,
+    'yellow_led': 0,
+    'red_led': 0
+}
 
 # Global dict that can be imported in main.py
 
@@ -62,7 +69,7 @@ if __name__ == "__main__":
     monitor = LedMonitor(poll_interval=1)
     try:
         while True:
-            print(sensor_data)  # Directly access global dict
+            print(phase_data)  # Directly access global dict
             time.sleep(2)
     except KeyboardInterrupt:
         GPIO.cleanup()
