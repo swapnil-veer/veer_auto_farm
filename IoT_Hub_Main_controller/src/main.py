@@ -14,8 +14,11 @@ from command_processor import processor_thread, processor
 
 # sim800l = SIM800L()
 config.setup_gpio()
-LedMonitor(poll_interval=1)
+time.sleep(5)
+LedMonitor(poll_interval=1)       # led monitoring started at new thread
+time.sleep(5)
 log_sensors(sensors=SENSORS)
+time.sleep(5)
 
 # processor
 # pump_manager
@@ -60,20 +63,20 @@ if __name__ == "__main__":
     t1.start()
     t2.start()
 
-    time.sleep(1)
+    # time.sleep(1)
 
-    time.sleep(1)
-    processor.add_command(30)
+    # time.sleep(1)
+    # processor.add_command(30)
 
-    # Simulate power
-    pump_manager.set_power(True)
-    time.sleep(10)  # Run for 10 sec
-    pump_manager.set_power(False)  # Power loss, should pause and rewrite
-    time.sleep(10)
-    pump_manager.set_power(True)  # Power back, continue
-    processor.add_command(10)
-    processor.add_command(15)
-    time.sleep(10) 
+    # # Simulate power
+    # pump_manager.set_power(True)
+    # time.sleep(10)  # Run for 10 sec
+    # pump_manager.set_power(False)  # Power loss, should pause and rewrite
+    # time.sleep(10)
+    # pump_manager.set_power(True)  # Power back, continue
+    # processor.add_command(10)
+    # processor.add_command(15)
+    # time.sleep(10) 
     # Keep main thread alive
     while True:
         time.sleep(1)

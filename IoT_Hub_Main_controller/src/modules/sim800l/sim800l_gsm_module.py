@@ -217,3 +217,43 @@ if __name__ == "__main__":
 # "AT+CFUN=1"               # Full functionality mode
 # "AT+CSCLK=1"              # Enable sleep mode
 # "AT+CSCLK=0"              # Disable sleep mode
+
+if __name__ == "__main__":
+    def test_sim800l():
+        """Test all SIM800L methods. Run on Pi with module connected."""
+        sim = SIM800L()  # Test __init__
+        if sim.ser is None:
+            logger.error("Init failed")
+            return
+
+        # Test send_command (basic AT)
+        resp = sim.send_command("AT")
+        logger.info(f"send_command: {resp}")
+
+        # Test check_connection
+        if sim.check_connection():
+            logger.info("Connection OK")
+        else:
+            logger.error("No connection")
+
+        # Test get_signal_strength
+        strength = sim.get_signal_strength()
+        logger.info(f"Signal: {strength} dBm")
+
+        # Test get_caller_id (manual: Call module from admin phone, run during ring)
+        caller = sim.get_caller_id()
+        logger.info(f"Caller ID: {caller}")
+
+        # Test send_sms (to admin; replace with test msg)
+        send_resp = sim.send_sms(sim.ALLOWED_NOS["admin"], "Test SMS from Pi")
+        logger.info(f"send_sms: {send_resp}")
+
+        # Test read_sms (manual: Send SMS to module, note index from check_new_sms)
+        sender, msg = sim.read_sms(1)  # Use known index
+        logger.info(f"read_sms: From {sender}: {msg}")
+
+        # Test check_new_sms (manual: Send SMS like "on 5" from admin)
+        valid_msgs = sim.check_new_sms()
+        logger.info(f"check_new_sms: {valid_msgs}")
+
+    test_sim800l()
