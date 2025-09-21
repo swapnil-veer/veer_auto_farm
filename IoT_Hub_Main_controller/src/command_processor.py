@@ -1,5 +1,6 @@
 import time
 from modules.pump_control import pump_context_manager, pump_manager
+from modules.phase_monitor import phase_data
 
 
 
@@ -38,7 +39,7 @@ class CommandProcessor:
 
         self._print_command(self.current_command, "Starting processing")
 
-        if self.pump_manager.power:
+        if phase_data['green_led'] == 1:
             with pump_context_manager:
                 start_time = time.time()
                 self.current_command['in_progress'] = True
@@ -58,7 +59,7 @@ class CommandProcessor:
                     if self.current_command['remaining_sec'] <= 0:
                         break
 
-                    if not self.pump_manager.power:
+                    if phase_data['green_led'] != 1:
                         # Power loss: rewrite command with remaining time
 
                         self.current_command['in_progress'] = False

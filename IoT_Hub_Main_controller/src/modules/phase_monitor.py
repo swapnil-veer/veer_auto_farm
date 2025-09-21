@@ -18,7 +18,7 @@ class LedMonitor:
     def __init__(self, poll_interval=1):
         """
         Monitor LED states in the background.
-        Updates global sensor_data dict.
+        Updates global phase_data dict.
         :param poll_interval: seconds between checks
         """
         self.green_pin = config.GPIO_PINS["phase_monitor_green"]["pin"]
@@ -34,7 +34,7 @@ class LedMonitor:
 
     def _monitor_loop(self):
         """Background loop to update LED states."""
-        global sensor_data
+        global phase_data
         while True:
             updated = False
 
@@ -42,18 +42,18 @@ class LedMonitor:
             yellow_state = GPIO.input(self.yellow_pin)
             red_state = GPIO.input(self.red_pin)
 
-            if sensor_data['green_led'] != green_state:
-                sensor_data['green_led'] = green_state
+            if phase_data['green_led'] != green_state:
+                phase_data['green_led'] = green_state
                 logger.info(f"Green LED changed: {green_state}")
                 updated = True
 
-            if sensor_data['yellow_led'] != yellow_state:
-                sensor_data['yellow_led'] = yellow_state
+            if phase_data['yellow_led'] != yellow_state:
+                phase_data['yellow_led'] = yellow_state
                 logger.info(f"Yellow LED changed: {yellow_state}")
                 updated = True
 
-            if sensor_data['red_led'] != red_state:
-                sensor_data['red_led'] = red_state
+            if phase_data['red_led'] != red_state:
+                phase_data['red_led'] = red_state
                 logger.info(f"Red LED changed: {red_state}")
                 updated = True
 

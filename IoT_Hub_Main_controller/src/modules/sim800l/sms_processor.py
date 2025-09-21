@@ -2,7 +2,8 @@ import time
 import  re
 from logging_config import logger
 from .sim800l_gsm_module import SIM800L
-from modules.motor_control import DEFAULT_DURATION
+from settings import DEFAULT_DURATION
+from command_processor import processor
 
 
 sim800l = SIM800L()
@@ -51,7 +52,8 @@ def msg_parser(dct):
             min = int(m.group(1))
         else:
             min = DEFAULT_DURATION
-            command_queue['on'].append({"sender" : dct['sender'], "duration" : min})
+            # command_queue['on'].append({"sender" : dct['sender'], "duration" : min})
+        processor.add_command(min)
     else:
         sim800l.send_msg(phone_no = dct['sender'], message = sample_msg)
         logger.error(f"Incorrect msg from sender {dct['sender']} : {dct['msg']}")

@@ -7,6 +7,8 @@ BASE_DIR = Path(__file__).resolve()
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+DEFAULT_DURATION = 30
+
 # Folder where CSV files will be stored
 CSV_LOG_DIR = "data/"
 
