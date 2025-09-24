@@ -2,15 +2,15 @@ from pathlib import Path
 from modules.phase_monitor import phase_data
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve()
+BASE_DIR = Path(__file__).resolve().parent
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-DEFAULT_DURATION = 30
+DEFAULT_DURATION = 0
 
 # Folder where CSV files will be stored
-CSV_LOG_DIR = "data/"
+CSV_LOG_DIR = BASE_DIR/"data/"
 
 # Define which sensors are available and enabled
 SENSORS = {

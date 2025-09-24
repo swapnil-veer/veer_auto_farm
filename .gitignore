@@ -5,6 +5,7 @@ ENV/
 env/
 venv1/
 farm_env/
+data/
 *.pyc
 __pycache__/
 
