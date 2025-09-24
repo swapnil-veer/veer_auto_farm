@@ -1,4 +1,6 @@
 import RPi.GPIO as GPIO
+GPIO.setwarnings(False)
+GPIO.cleanup()      #FOR PREVIOUS CLEANUP
 
 GPIO_PINS = {
     "sda" : {"pin": 2, "type": "i2c"}, # I2C SDA (BCM 2, Pin 3)
