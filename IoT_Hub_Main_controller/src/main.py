@@ -4,10 +4,8 @@ from settings import SENSORS
 from file_manager import log_sensors
 from modules.phase_monitor import LedMonitor
 from modules.lcd_display.lcd_module import LCD
-# from modules.motor_control import MotorControl
 import time
 from logging_config import logger
-# from modules.sim800l.sms_processor import sms_listener
 from modules.pump_control import pump_manager
 from command_processor import processor_thread, processor
 from modules.sim800l.sim import FarmSMSHandler
