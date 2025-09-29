@@ -1,4 +1,6 @@
 import config
+config.setup_gpio()
+
 import threading
 from settings import SENSORS
 from file_manager import log_sensors
@@ -8,12 +10,13 @@ import time
 from logging_config import logger
 from modules.pump_control import pump_manager
 from command_processor import processor_thread, processor
-from modules.sim800l.sim import FarmSMSHandler
+from modules.sim800l.sim import sms_thread
 
 # sim800l = SIM800L()
-config.setup_gpio()
-time.sleep(5)
-FarmSMSHandler()                       # sms thread started
+time.sleep(2)
+LCD()           # Lcd thread started
+time.sleep(2)
+sms_thread                       # sms thread started
 time.sleep(5)
 LedMonitor(poll_interval=1)       # led monitoring started at new thread
 time.sleep(5)
