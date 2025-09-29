@@ -56,13 +56,23 @@ class FarmSMSHandler:
         logger.info("SMS started background monitoring thread.")
         print("in sms thread")
 
-
-
-    def update_signal_display(self):
+    def get_sim_status(self):
+        try:
+            imsi = self.sm.GetSIMIMSI()
+        except Exception as e:
+            logger.error(e)
+        if imsi:
+            return True
+    
+    def get_signal_strength(self):
         """signal strength """
-        signal = self.sm.GetSignalQuality()
-        strength = signal["SignalStrength"]  # 0–100
-        return strength
+        try:
+            signal = self.sm.GetSignalQuality()
+        except Exception as e:
+            logger.error(e)
+        if signal:
+            strength = signal["SignalStrength"]  # 0–100
+            return strength
 
     def send_sms(self, number, text):
         """Send SMS with error handling"""
@@ -153,5 +163,7 @@ class FarmSMSHandler:
         while True:
             self.check_inbox()
             time.sleep(10)
+
+sms_thread = FarmSMSHandler
     
 # sms_thread = FarmSMSHandler
