@@ -21,7 +21,7 @@ class CommandProcessor:
         """Add a new one-time command to the queue as a dict."""
         command_dict = {
             'duration_sec': duration_minutes ,
-            'remaining_sec': duration_minutes,
+            'remaining_sec': duration_minutes ,
             'in_progress': False,
             'start_time': None
         }

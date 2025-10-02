@@ -1,4 +1,5 @@
 import config
+config.cleanup_gpio()
 config.setup_gpio()
 
 import threading
