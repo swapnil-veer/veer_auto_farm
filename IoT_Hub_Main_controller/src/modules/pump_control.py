@@ -30,19 +30,19 @@ class PumpManager:
     """
     def __init__(self):
         self.power = False
-        self.relay_state = 'OFF'  # 'ON' or 'OFF'
+        self.state = False         #Default off
         self.pump_pin = GPIO_PINS["relay_pi_onoff"]["pin"]
 
     def relay_on(self):
         """Turn relay on."""
         print("Relay turned ON")
-        self.relay_state = 'ON'
+        self.state = True
         set_high(self.pump_pin)
 
     def relay_off(self):
         """Turn relay off."""
         print("Relay turned OFF")
-        self.relay_state = 'OFF'
+        self.state = False
         set_low(self.pump_pin)
 
     def set_power(self, state: bool):

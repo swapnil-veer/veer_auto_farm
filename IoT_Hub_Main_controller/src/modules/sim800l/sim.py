@@ -1,19 +1,23 @@
 import os
 import re
 
+
 from dotenv import load_dotenv
 load_dotenv()
 
 ph_no_1 = "+917038835527"
 ph_no_2 = os.getenv("ph_no_2")
 
+counter = 0
+i = 0
 
 import gammu
 import time
 from logging_config import logger
 from settings import DEFAULT_DURATION
-from command_processor import processor
+# from command_processor import processor
 import threading
+
 
 sample_msg = """
     Please send msg in correct format.
@@ -32,52 +36,91 @@ class FarmSMSHandler:
     }
 
     def __init__(self):
-
         # Init GSM with retries
-        self.sm = gammu.StateMachine()
-        self.sm.ReadConfig()
-        connected = False
-        print("in sms ")
+        # self.sm = gammu.StateMachine()
+        # self.sm.ReadConfig()
+        self.connected = False
+        self.signal = 0
 
-        for attempt in range(5):  # retry up to 5 times
-            try:
-                self.sm.Init()
-                connected = True
-                break
-            except Exception as e:
-                print(f"GSM init failed: {e}")
-                time.sleep(10)  # wait before retry
-            
-        if not connected:
-            raise RuntimeError("Unable to initialize GSM modem")
-            # Start background thread
+        self._init_sm()  # Initial
         self._thread = threading.Thread(target=self._sms_loop, daemon=True)
         self._thread.start()
-        logger.info("SMS started background monitoring thread.")
-        print("in sms thread")
+        logger.info("SMS background thread started")
+
+    def _init_sm(self):
+        self.sm = gammu.StateMachine()
+        self.sm.ReadConfig()
+        try:
+            self.sm.Init()
+            self._update_status(True)
+            logger.info(f"Sim Connected")
+
+        except Exception as e:
+            logger.error(f"Init failed: {e}")
+            self._update_status(False)
 
 
+    def _check_connection(self):
+        if not self.connected:
+            self._init_sm()  # Recreate on disconnect
+            return
+        try:
+            self.sm.GetSIMIMSI()  # Quick check
+        except gammu.ERR_TIMEOUT:
+            self._update_status(False)
+        except Exception:
+            self._update_status(False)
 
-    def update_signal_display(self):
-        """signal strength """
-        signal = self.sm.GetSignalQuality()
-        strength = signal["SignalStrength"]  # 0–100
-        return strength
+    def _update_status(self, boolean:bool):
+        self.connected = boolean
+        if self.connected:
+            logger.info("SIM connected")
+        else:
+            logger.error("SIM not connected")
+
+    def get_sim_status(self):
+        return self.connected  # Fast var check; no blocking call
+
+    def _signal_strength(self):
+        """Signal strength in %"""
+        if not self.connected :
+            return None
+        try:
+            signal = self.sm.GetSignalQuality()
+            return signal["SignalPercent"]
+        except gammu.ERR_TIMEOUT:
+            self._update_status(False)
+            return None
+        except Exception as e:
+            logger.error(f"Signal error: {e}")
+            self._update_status(False)
+            return None  
+
+    def get_signal_strength(self):
+        return self.signal
 
     def send_sms(self, number, text):
         """Send SMS with error handling"""
-        try:
+        def _worker():
             message = {
                 "Text": text,
                 "SMSC": {"Location": 1},
                 "Number": number,
             }
-            self.sm.SendSMS(message)
-            logger.info(f"msg sent to {number} text : {text}")
-        except Exception as e:
-            logger.error(e)
+            try:
+                self.sm.SendSMS(message)
+                logger.info(f"msg sent to {number} text : {text}")
+            except gammu.ERR_TIMEOUT:
+                self.connected = False
+            except Exception as e:
+                logger.error(f"SMS error: {e}")
+        # Launch worker thread
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
 
     def _msg_parser(self, sender, text):
+        from command_processor import processor
+
         """
         Accepts messages like:
         - 'PUMP ON 120', 'ON 120', 'START 120'
@@ -91,12 +134,12 @@ class FarmSMSHandler:
         msg_body = text
 
         # OFF
-        if re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', msg_body):
+        if re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', msg_body, flags=re.IGNORECASE):
             # command_queue['off'].append({"sender" : dct['sender']})
             pass
 
         # STATUS
-        elif re.search(r'\bSTATUS\b', msg_body):
+        elif re.search(r'\bSTATUS\b', msg_body, flags=re.IGNORECASE):
             # command_queue['status'].append({"sender" : dct['sender']})
             pass
         
@@ -108,50 +151,63 @@ class FarmSMSHandler:
             else:
                 min = DEFAULT_DURATION
                 # command_queue['on'].append({"sender" : dct['sender'], "duration" : min})
-            processor.add_command(min)
+            processor.add_command(min, sender = sender)
         else:
             self.send_sms(number = sender, text = sample_msg)
             logger.error(f"Incorrect msg from sender {sender} : {msg_body}")
             return None
 
+
+
     def check_inbox(self):
         """Check inbox and process commands"""
+        self._check_connection()  # Periodic check/re-init
+        if not self.connected:
+            time.sleep(5)
+            return None
+
         try:
-            folders = self.sm.GetSMSFolders()
-            for folder in folders:
-                # print(type(folder))
-                # print(folder)
-                try:
-                    sms_list = self.sm.GetNextSMS(Folder=folder["Inbox"], Location=0)
-                    # print(sms_list)
-                    # print(1)
-                    while True:
-                        for sms in sms_list:
-                            # print(sms)
-                            # print(2)
-                            sender = sms["Number"]
-                            text = sms["Text"].strip()
-                            # print(text)
-                            logger.info(f"sender : {sender}, msg : {text}")
-
-                            if sender in self.ALLOWED_NOS.values():
-                                self._msg_parser(sender, text)
-                                self.sm.DeleteSMS(Folder=0, Location=sms["Location"])
-                            else:
-                                self.sm.DeleteSMS(Folder=0, Location=sms["Location"])
-                                logger.info(f"Unauthorized sender {sender}")
-
-                        sms_list = self.sm.GetNextSMS(Folder=folder["Inbox"],
-                                                     Location=sms_list[-1]["Location"])
-                except gammu.ERR_EMPTY:
-                    pass
+            self.signal = self._signal_strength()
+            # self.sm.Init()  # Init here if not in __init__
+            status = self.sm.GetSMSStatus()
+            remain = status["SIMUsed"] + status["PhoneUsed"] + status["TemplatesUsed"]
+            sms = []
+            start = True
+            while remain > 0:
+                if start:
+                    cursms = self.sm.GetNextSMS(Start=True, Folder=0)
+                    start = False
+                else:
+                    cursms = self.sm.GetNextSMS(Location=cursms[0]["Location"], Folder=0)
+                remain -= len(cursms)
+                sms.append(cursms)
+            data = gammu.LinkSMS(sms)  # Combine multi-part
+            for x in data:
+                m = x[0]
+                sender = m["Number"]
+                text = m["Text"].strip()
+                state = m["State"]
+                if m["State"] != "UnRead":
+                    continue
+                logger.info(f"sender: {sender}, msg: {text}")
+                if sender in self.ALLOWED_NOS.values():
+                    self._msg_parser(sender, text)
+                else:
+                    logger.info(f"Unauthorized: {sender}")
+                # self.sm.DeleteSMS(Folder=0, Location=m["Location"])
+                self.sm.DeleteSMS(m["Folder"], m["Location"])
+        except gammu.ERR_TIMEOUT:
+            self.connected = False
+        except gammu.ERR_EMPTYSMSLOCATION:
+            pass
         except Exception as e:
-            logger.error(f"check in box error {e}")
-
+            logger.error(f"SMS loop error: {e}")
+        time.sleep(2)  # Poll interval
         
     def _sms_loop(self):
         while True:
             self.check_inbox()
-            time.sleep(10)
+
+sms_thread = FarmSMSHandler()
     
 # sms_thread = FarmSMSHandler
