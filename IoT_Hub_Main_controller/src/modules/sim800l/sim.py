@@ -15,7 +15,7 @@ import gammu
 import time
 from logging_config import logger
 from settings import DEFAULT_DURATION
-from command_processor import processor
+# from command_processor import processor
 import threading
 
 
@@ -101,22 +101,26 @@ class FarmSMSHandler:
 
     def send_sms(self, number, text):
         """Send SMS with error handling"""
-        try:
+        def _worker():
             message = {
                 "Text": text,
                 "SMSC": {"Location": 1},
                 "Number": number,
             }
-            self.sm.SendSMS(message)
-            logger.info(f"msg sent to {number} text : {text}")
-        except gammu.ERR_TIMEOUT:
-            self.connected = False
-        except Exception as e:
-            logger.error(f"SMS error: {e}")
-
-
+            try:
+                self.sm.SendSMS(message)
+                logger.info(f"msg sent to {number} text : {text}")
+            except gammu.ERR_TIMEOUT:
+                self.connected = False
+            except Exception as e:
+                logger.error(f"SMS error: {e}")
+        # Launch worker thread
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
 
     def _msg_parser(self, sender, text):
+        from command_processor import processor
+
         """
         Accepts messages like:
         - 'PUMP ON 120', 'ON 120', 'START 120'
@@ -147,7 +151,7 @@ class FarmSMSHandler:
             else:
                 min = DEFAULT_DURATION
                 # command_queue['on'].append({"sender" : dct['sender'], "duration" : min})
-            processor.add_command(min)
+            processor.add_command(min, sender = sender)
         else:
             self.send_sms(number = sender, text = sample_msg)
             logger.error(f"Incorrect msg from sender {sender} : {msg_body}")
@@ -182,12 +186,16 @@ class FarmSMSHandler:
                 m = x[0]
                 sender = m["Number"]
                 text = m["Text"].strip()
+                state = m["State"]
+                if m["State"] != "UnRead":
+                    continue
                 logger.info(f"sender: {sender}, msg: {text}")
                 if sender in self.ALLOWED_NOS.values():
                     self._msg_parser(sender, text)
                 else:
                     logger.info(f"Unauthorized: {sender}")
-                self.sm.DeleteSMS(Folder=0, Location=m["Location"])
+                # self.sm.DeleteSMS(Folder=0, Location=m["Location"])
+                self.sm.DeleteSMS(m["Folder"], m["Location"])
         except gammu.ERR_TIMEOUT:
             self.connected = False
         except gammu.ERR_EMPTYSMSLOCATION:

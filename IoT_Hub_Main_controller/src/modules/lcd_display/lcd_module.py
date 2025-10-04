@@ -19,7 +19,7 @@ def get_system_status(phase_data):
         "sim_status":  sms_thread.get_sim_status(),  
         # "network": sms_handler.get_network_name(),
         "pump_on": pump_manager.get_pump_state(),
-        "pump_rem": round(processor.current_command['remaining_sec']) if processor.current_command else False,
+        "pump_rem": round(processor.current_command['remaining_sec']/60) if processor.current_command else False,
         # "pump_total": pump_handler.total_today,
         # "battery": battery_handler.get_battery_percent()
     }
@@ -190,7 +190,7 @@ class LCD:
 
         #line 2
         if status['pump_on']:
-            line2 = f"PUMP:ON Rem:{status['pump_rem']}"
+            line2 = f"PUMP:ON Rem:{status['pump_rem']}min"
         elif status["power"] == "OFF" and status['pump_rem'] != False:
             line2 = f"PUMP:OFF WAIT PWR"
         else:
