@@ -12,12 +12,17 @@ from logging_config import logger
 from modules.pump_control import pump_manager
 from command_processor import processor_thread, processor
 from modules.sim800l.sim import sms_thread
+from modules.sim800l.sms_processor import sms_processor
 
 # sim800l = SIM800L()
 time.sleep(2)
 LCD()           # Lcd thread started
 time.sleep(2)
 sms_thread                       # sms thread started
+
+thread = threading.Thread(target=sms_processor, daemon=True)
+thread.start()  
+
 time.sleep(5)
 LedMonitor(poll_interval=1)       # led monitoring started at new thread
 time.sleep(5)

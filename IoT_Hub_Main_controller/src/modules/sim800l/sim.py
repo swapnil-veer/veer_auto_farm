@@ -19,14 +19,7 @@ from settings import DEFAULT_DURATION
 import threading
 
 
-sample_msg = """
-    Please send msg in correct format.
-    Accepts messages like:
-      - 'PUMP ON 120', 'ON 120', 'START 120'
-      - 'PUMP ON' (uses default)
-      - 'OFF', 'STOP'
-      - 'STATUS'
-      """
+sms_queue = []
 
 
 class FarmSMSHandler:
@@ -41,6 +34,7 @@ class FarmSMSHandler:
         # self.sm.ReadConfig()
         self.connected = False
         self.signal = 0
+        self._lock = threading.Lock()
 
         self._init_sm()  # Initial
         self._thread = threading.Thread(target=self._sms_loop, daemon=True)
@@ -118,47 +112,6 @@ class FarmSMSHandler:
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
 
-    def _msg_parser(self, sender, text):
-        from command_processor import processor
-
-        """
-        Accepts messages like:
-        - 'PUMP ON 120', 'ON 120', 'START 120'
-        - 'PUMP ON' (uses default)
-        - 'OFF', 'STOP'
-        - 'STATUS'
-        Returns a tuple: ('ON', seconds) | ('OFF', None) | ('STATUS', None) | (None, None)
-        """
-        # {index: "", sender : "", message = "'"}
-
-        msg_body = text
-
-        # OFF
-        if re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', msg_body, flags=re.IGNORECASE):
-            # command_queue['off'].append({"sender" : dct['sender']})
-            pass
-
-        # STATUS
-        elif re.search(r'\bSTATUS\b', msg_body, flags=re.IGNORECASE):
-            # command_queue['status'].append({"sender" : dct['sender']})
-            pass
-        
-        # ON with optional duration
-        elif re.search(r'\b(ON|START)\b', msg_body, flags=re.IGNORECASE):
-            m = re.search(r'(\d+)', msg_body)
-            if m:
-                min = int(m.group(1))
-            else:
-                min = DEFAULT_DURATION
-                # command_queue['on'].append({"sender" : dct['sender'], "duration" : min})
-            processor.add_command(min, sender = sender)
-        else:
-            self.send_sms(number = sender, text = sample_msg)
-            logger.error(f"Incorrect msg from sender {sender} : {msg_body}")
-            return None
-
-
-
     def check_inbox(self):
         """Check inbox and process commands"""
         self._check_connection()  # Periodic check/re-init
@@ -187,11 +140,13 @@ class FarmSMSHandler:
                 sender = m["Number"]
                 text = m["Text"].strip()
                 state = m["State"]
-                if m["State"] != "UnRead":
+                if state != "UnRead":
                     continue
                 logger.info(f"sender: {sender}, msg: {text}")
                 if sender in self.ALLOWED_NOS.values():
-                    self._msg_parser(sender, text)
+                    with self._lock:
+                        sms_queue.append(m)
+                    # self._msg_parser(sender, text)
                 else:
                     logger.info(f"Unauthorized: {sender}")
                 # self.sm.DeleteSMS(Folder=0, Location=m["Location"])

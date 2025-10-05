@@ -3,6 +3,7 @@ from modules.pump_control import pump_context_manager, pump_manager
 from modules.phase_monitor import phase_data
 from logging_config import logger
 from modules.sim800l.sim import sms_thread
+import threading
 
 
 
@@ -19,6 +20,8 @@ class CommandProcessor:
         self.current_command = None  # Currently processing dict
         self.poll_interval = poll_interval
         self.is_running = False
+        self.manual_stop = False
+        self._lock = threading.Lock()
 
     def add_command(self, duration_minutes, sender = None):
         """Add a new one-time command to the queue as a dict."""
@@ -33,10 +36,22 @@ class CommandProcessor:
         if sender:
             sms_thread.send_sms(sender, f"Added {round(command_dict['remaining_sec']/60)} min command")  # Feedback
         logger.info(f"Command added: {command_dict}")
-    
+
     def _print_command(self, command_dict, phase):
         """Helper to print command at a specific phase."""
         print(f"{phase}: {command_dict}")
+    
+    def delete_one(self):
+        if self.current_command:
+            self.manual_stop = True
+    
+    def delete_all(self):
+        self.delete_one()
+        self.command_queue.clear()
+        return True
+
+    def reset_manual_stop(self):
+        self.manual_stop = False
 
     def _process_current_command(self):
         """Process the current command if power is available."""
@@ -74,6 +89,15 @@ class CommandProcessor:
                         msg = f"Power loss. Waiting, {round(self.current_command['remaining_sec']/60)} min left"
                         sms_thread.send_sms(self.current_command.get('sender'), msg)  # Feedback
                         return  # Exit context and wait for next poll
+                    
+                    if self.manual_stop == True:
+                        sender = self.current_command.get('sender')
+                        copy_cmd = dict(self.current_command)
+                        self.current_command = None
+                        msg = f"Following command deleted {copy_cmd}"
+                        sms_thread.send_sms(sender, msg)
+                        self.reset_manual_stop()
+                        return
 
                 # Update remaining based on actual elapsed
                 self.current_command['in_progress'] = False
@@ -81,6 +105,14 @@ class CommandProcessor:
                 msg = f"Pump completed. {round(self.current_command['duration_sec']/60)} min total"
                 sms_thread.send_sms(self.current_command.get('sender'), msg)  # Feedback
 
+        elif self.manual_stop == True:
+            sender = self.current_command.get('sender')
+            copy_cmd = dict(self.current_command)
+            self.current_command = None
+            msg = f"Following command deleted {copy_cmd}"
+            sms_thread.send_sms(sender, msg)
+            self.reset_manual_stop()
+            return
         else:
             logger.info("Waiting for power to process command.")
 
@@ -95,9 +127,11 @@ class CommandProcessor:
                 logger.info(f"Command fully completed: {round(original_duration / 60)} minutes total.")
                 self.current_command = None
 
-            if not self.current_command and self.command_queue:
-                self.current_command = self.command_queue.pop(0)
-                # self._print_command(self.current_command, "Dequeued and set as current")
+            time.sleep(5)   # time for delete all execute if abailable
+            with self._lock:
+                if not self.current_command and self.command_queue:
+                    self.current_command = self.command_queue.pop(0)
+                    # self._print_command(self.current_command, "Dequeued and set as current")
 
             # Process current if exists
             if self.current_command:
