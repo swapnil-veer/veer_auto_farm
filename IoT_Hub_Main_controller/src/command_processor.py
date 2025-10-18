@@ -44,7 +44,7 @@ class CommandProcessor:
     def delete_one(self):
         if self.current_command:
             self.manual_stop = True
-    
+            
     def delete_all(self):
         self.delete_one()
         self.command_queue.clear()

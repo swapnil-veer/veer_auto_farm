@@ -5,9 +5,9 @@ import time
 import re
 from .sim import sms_thread, sms_queue
 from command_processor import processor
-from pump_control import pump_manager
-from phase_monitor import phase_data
-from lcd_display.lcd_module import get_system_status
+from modules.pump_control import pump_manager
+from modules.phase_monitor import phase_data
+from modules.lcd_display.lcd_module import get_system_status
 
 
 sample_msg = """
@@ -18,8 +18,9 @@ sample_msg = """
       - 'OFF', 'STOP'
       - 'STATUS'
       """
-def status(status):
-    line1 =  status['power']
+def status():
+    status = get_system_status(phase_data)
+    line1 =  f"POWER : {status['power']}"
     if status['pump_on']:
         line2 = f"PUMP:ON Rem:{status['pump_rem']}min"
     elif status["power"] == "OFF" and status['pump_rem'] != False:
@@ -57,8 +58,9 @@ def msg_parser(queue = sms_queue):
         elif re.search(r'\bSTATUS\b', text, flags=re.IGNORECASE):
             # command_queue['status'].append({"sender" : dct['sender']})
             text = status()
+            text_body = ""
             for i in text:
-                text_body = i + "\n"
+                text_body += i + "\n"
             sms_thread.send_sms(number = sender, text = text_body)
 
         # ON with optional duration

@@ -29,7 +29,6 @@ class LCD:
         """
         Initialize the LCD with I2C address (default: 0x27)
         """
-        print("in lcd")
         self.lcd = CharLCD(i2c_expander="PCF8574", address=i2c_address,
                            port=1, cols=20, rows=4, charmap="A02",
                            auto_linebreaks=True)
