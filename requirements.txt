@@ -4,6 +4,7 @@ future==1.0.0
 gsm0338==1.0.0
 iniconfig==2.1.0
 iso8601==2.1.0
+lgpio==0.2.2.0
 mccabe==0.7.0
 packaging==25.0
 pluggy==1.6.0
@@ -13,9 +14,11 @@ Pygments==2.19.2
 pyserial==3.5
 pytest==8.4.1
 python-dotenv==1.1.1
+python-gammu==3.2.4
 PyYAML==6.0.2
+rpi-lgpio==0.6
+RPi.GPIO==0.7.1
 RPLCD==1.4.0
-serial==0.0.97
 sim800l-gsm-module==1.0.1
 six==1.17.0
 smbus2==0.5.0
