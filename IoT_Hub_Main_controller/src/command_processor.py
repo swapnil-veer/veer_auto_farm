@@ -16,16 +16,17 @@ class CommandProcessor:
     """
     def __init__(self, pump_manager, poll_interval=5):
         self.pump_manager = pump_manager
-        self.command_queue = []  # List of dicts: [{'duration_sec': 300, 'remaining_sec': 300, 'in_progress': False, 'start_time': None}, ...]
+        self.command_queue = []  # List of dicts: [{'mode': 'manual', 'duration_sec': 300, 'remaining_sec': 300, 'in_progress': False, 'start_time': None}, ...]
         self.current_command = None  # Currently processing dict
         self.poll_interval = poll_interval
         self.is_running = False
         self.manual_stop = False
         self._lock = threading.Lock()
 
-    def add_command(self, duration_minutes, sender = None):
+    def add_command(self,duration_minutes = None, mode = "manual", sender = None):
         """Add a new one-time command to the queue as a dict."""
         command_dict = {
+            'mode' : mode,
             'duration_sec': duration_minutes * 60,
             'remaining_sec': duration_minutes * 60,
             'in_progress': False,
@@ -52,10 +53,11 @@ class CommandProcessor:
 
     def reset_manual_stop(self):
         self.manual_stop = False
-
-    def _process_current_command(self):
+                 
+    def _process_current_command(self, auto : bool):
         """Process the current command if power is available."""
-        if not self.current_command or self.current_command['remaining_sec'] <= 0:
+        # if not self.current_command or self.current_command['remaining_sec'] <= 0:
+        if not self.current_command :
             return
         logger.info(f"Starting processing : {self.current_command}")
 
@@ -64,46 +66,54 @@ class CommandProcessor:
                 start_time = time.time()
                 self.current_command['in_progress'] = True
                 self.current_command['start_time'] = start_time
-                msg = f"Pump ON for {round(self.current_command['remaining_sec']/60)} min"
+                if auto:
+                    msg = "Pump ON in Auto mode"
+                else:
+                    msg = f"Pump ON for {round(self.current_command['remaining_sec']/60)} min"
                 sms_thread.send_sms(self.current_command.get('sender'), msg)  # Feedback
                 
-                while self.current_command['remaining_sec'] > 0:
-                    sleep_time = min(self.poll_interval, self.current_command['remaining_sec'])
-                    time.sleep(sleep_time)
+                while True:
+                    if not auto:
+                        if self.current_command['remaining_sec'] <= 0:
+                            break
+                        sleep_time = min(self.poll_interval, self.current_command['remaining_sec'])
+                    else:
+                        sleep_time = self.poll_interval
+                    time.sleep((sleep_time))
 
-                    # rewrite current command with remaining sec 
-                    elapsed = time.time() - start_time
-                    self.current_command['remaining_sec'] = max(0, self.current_command['remaining_sec'] - elapsed)
-                    start_time = time.time()  # Reset start time for next iteration
+                    if not auto:
+                        # rewrite current command with remaining sec 
+                        elapsed = time.time() - start_time
+                        self.current_command['remaining_sec'] = max(0, self.current_command['remaining_sec'] - elapsed)
+                        start_time = time.time()  # Reset start time for next iteration
 
- 
-                    if self.current_command['remaining_sec'] <= 0:
-                        break
-
+                
                     if phase_data['green_led'] != 1:
                         # Power loss: rewrite command with remaining time
-
                         self.current_command['in_progress'] = False
-                        # self._print_command(self.current_command, "Power loss - updated")
-                        logger.info(f"Power loss detected. Rewriting command with {self.current_command['remaining_sec']} seconds remaining.")
-                        msg = f"Power loss. Waiting, {round(self.current_command['remaining_sec']/60)} min left"
+                        if auto:
+                            msg = "Power loss in AUTO mode. Waiting for power to resume."
+                        else:
+                            msg = f"Power loss. Waiting, {round(self.current_command['remaining_sec']/60)} min left"
                         sms_thread.send_sms(self.current_command.get('sender'), msg)  # Feedback
+                        logger.info(msg)
                         return  # Exit context and wait for next poll
                     
                     if self.manual_stop == True:
                         sender = self.current_command.get('sender')
                         copy_cmd = dict(self.current_command)
                         self.current_command = None
-                        msg = f"Following command deleted {copy_cmd}"
+                        if auto:
+                            msg = f"AUTO mode stopped by user: {copy_cmd}"
+                        else:
+                            msg = f"Following command deleted {copy_cmd}"
                         sms_thread.send_sms(sender, msg)
                         self.reset_manual_stop()
                         return
 
                 # Update remaining based on actual elapsed
                 self.current_command['in_progress'] = False
-                logger.info(f"Command segment completed. Remaining: {self.current_command['remaining_sec']} seconds.")
-                msg = f"Pump completed. {round(self.current_command['duration_sec']/60)} min total"
-                sms_thread.send_sms(self.current_command.get('sender'), msg)  # Feedback
+
 
         elif self.manual_stop == True:
             sender = self.current_command.get('sender')
@@ -122,10 +132,14 @@ class CommandProcessor:
         logger.info("CommandProcessor started. Running continuously...")
         while self.is_running:
             # Dequeue next command if current is done and queue has items
-            if self.current_command and self.current_command['remaining_sec'] <= 0:
-                original_duration = self.current_command['duration_sec']
-                logger.info(f"Command fully completed: {round(original_duration / 60)} minutes total.")
-                self.current_command = None
+            if self.current_command and self.current_command['mode'] != 'auto':
+                if self.current_command['remaining_sec'] <= 0:
+                    logger.info(f"Command segment completed. Remaining: {self.current_command['remaining_sec']} seconds.")
+                    msg = f"Pump completed. {round(self.current_command['duration_sec']/60)} min total"
+                    sms_thread.send_sms(self.current_command.get('sender'), msg)  # Feedback
+                    # original_duration = self.current_command['duration_sec']
+                    # logger.info(f"Command fully completed: {round(original_duration / 60)} minutes total.")
+                    self.current_command = None
 
             time.sleep(5)   # time for delete all execute if abailable
             with self._lock:
@@ -135,7 +149,10 @@ class CommandProcessor:
 
             # Process current if exists
             if self.current_command:
-                self._process_current_command()
+                if self.current_command['mode'] == 'auto':
+                    self._process_current_command(auto=True)
+                else:
+                    self._process_current_command(auto=False)
 
             time.sleep(self.poll_interval)
 

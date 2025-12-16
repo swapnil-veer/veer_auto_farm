@@ -13,10 +13,12 @@ from lcd_display.lcd_module import get_system_status
 sample_msg = """
     Please send msg in correct format.
     Accepts messages like:
-      - 'PUMP ON 120', 'ON 120', 'START 120'
-      - 'PUMP ON' (uses default)
-      - 'OFF', 'STOP'
-      - 'STATUS'
+    - 'PUMP ON 120', 'ON 120', 'START 120'
+    - 'PUMP ON' (uses default)
+    - 'AUTO ON' - Motor starts in Auto mode
+    - 'OFF', 'STOP' - Off Auto mode / Delete Current Commands.
+    - 'ALL OFF' - Delete all commands.
+    - 'STATUS'
       """
 def status(status):
     line1 =  status['power']
@@ -34,7 +36,9 @@ def msg_parser(queue = sms_queue):
     Accepts messages like:
     - 'PUMP ON 120', 'ON 120', 'START 120'
     - 'PUMP ON' (uses default)
-    - 'OFF', 'STOP'
+    - 'AUTO ON' - Motor starts in Auto mode
+    - 'OFF', 'STOP' - Off Auto mode / Delete Current Commands.
+    - 'ALL OFF' - Delete all commands.
     - 'STATUS'
     Returns a tuple: ('ON', seconds) | ('OFF', None) | ('STATUS', None) | (None, None)
     """
@@ -56,7 +60,7 @@ def msg_parser(queue = sms_queue):
         # STATUS
         elif re.search(r'\bSTATUS\b', text, flags=re.IGNORECASE):
             # command_queue['status'].append({"sender" : dct['sender']})
-            text = status()
+            text = status(get_system_status)
             for i in text:
                 text_body = i + "\n"
             sms_thread.send_sms(number = sender, text = text_body)
@@ -69,7 +73,12 @@ def msg_parser(queue = sms_queue):
             else:
                 min = DEFAULT_DURATION
                 # command_queue['on'].append({"sender" : dct['sender'], "duration" : min})
-            processor.add_command(min, sender = sender)
+            processor.add_command(min, mode="manual",sender = sender)
+
+        # For auto mode
+        elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
+            processor.add_command(mode="auto", sender=sender)
+
         else:
             sms_thread.send_sms(number = sender, text = sample_msg)
             logger.error(f"Incorrect msg from sender {sender} : {text}")
