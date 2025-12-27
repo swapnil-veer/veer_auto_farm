@@ -7,9 +7,8 @@ class CommandProcessor:
     Uses context manager for safe relay operations.
     Runs a continuous polling loop.
     """
-    def __init__(self,pump_context_manager, phase_data, logger,poll_interval=5, event_handler=None):
+    def __init__(self,pump_context_manager, logger,poll_interval=5, event_handler=None, power_service = None):
         self.pump_context_manager = pump_context_manager
-        self.phase_data = phase_data
         self.command_queue = []  # List of dicts: [{'mode': 'manual', 'duration_sec': 300, 'remaining_sec': 300, 'in_progress': False, 'start_time': None}, ...]
         self.current_command = None  # Currently processing dict
         self.poll_interval = poll_interval
@@ -19,6 +18,7 @@ class CommandProcessor:
         self._lock = threading.Lock()
         self.logger = logger
         self.event_handler = event_handler  # callable or None
+        self.power_service = power_service
 
     def add_command(self,duration_minutes = None, mode = "manual", sender = None):
         """Add a new one-time command to the queue as a dict."""
@@ -112,7 +112,7 @@ class CommandProcessor:
             return
         self.logger.info(f"Starting processing : {self.current_command}")
 
-        if self.phase_data['green_led'] == 1:
+        if self.power_service.is_power_available():
             with self.pump_context_manager:
                 start_time = time.time()
                 self.current_command['in_progress'] = True
@@ -154,7 +154,7 @@ class CommandProcessor:
                         start_time = time.time()  # Reset start time for next iteration
 
                 
-                    if self.phase_data['green_led'] != 1:                   
+                    if not self.power_service.is_power_available():                   
                         # Power loss: rewrite command with remaining time
                         self.current_command['in_progress'] = False
                         if self.event_handler and self.current_command:

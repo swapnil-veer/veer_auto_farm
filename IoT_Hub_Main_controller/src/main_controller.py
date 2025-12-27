@@ -12,12 +12,14 @@ class MainController:
     - Reads system status (phase_monitor, CommandProcessor state)
     """
 
-    def __init__(self, command_processor, phase_data, sms_thread, logger):
+    def __init__(self, command_processor, led_monitor, sms_thread, logger):
         self.command_processor = command_processor    # CommandProcessor instance
-        self.phase_data = phase_data                  # global dict from phase_monitor
+        self.led_monitor = led_monitor
+        # self.phase_data = phase_data                  # global dict from phase_monitor
         self.sms = sms_thread
         self.logger = logger
         self._event_handler = EventHandler(sms=self.sms, logger=self.logger)
+        self.power_service = PowerStatusService(led_monitor)
 
     # === PUBLIC ENTRY POINT (for SMS layer) ===
     def handle_incoming_sms(self, sender: str, text: str) -> str:
@@ -108,7 +110,7 @@ class MainController:
             manual_remaining_min = None
 
         status = {
-            "power": "ON" if self.phase_data["green_led"] == 1 else "OFF",
+            "power": self.power_service.get_status(),
             "mode": mode,                                                    # 'manual' / 'auto' / None
             "pump_on": self.command_processor.pump_context_manager.pump_manager.get_pump_state(),  # from pump_manager
             "manual_remaining_min": manual_remaining_min,  # None in auto/idle
@@ -267,6 +269,15 @@ class EventHandler:
                 self.sms.send_sms(sender, text)
         self.logger.info(f"COMMAND_DELETED_CURRENT: {data}")
 
+class PowerStatusService:
+    def __init__(self, led_monitor):
+        self.led_monitor = led_monitor
+    
+    def is_power_available(self) -> bool:
+        return self.led_monitor.is_power_available()
+    
+    def get_status(self) -> str:
+        return self.led_monitor.get_status()
 
 
 

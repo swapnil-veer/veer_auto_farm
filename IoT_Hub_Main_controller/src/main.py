@@ -19,11 +19,11 @@ from modules.sim800l.sms_processor import sms_processor, set_controller
 #create pump manager instance
 pump_manager = PumpManager()
 pump_context_manager = PumpContextManager(pump_manager)
+led_monitor = LedMonitor(poll_interval=1)
 
 # command_processor instance
 processor = CommandProcessor(
     pump_context_manager=pump_context_manager,
-    phase_data=phase_data,
     logger=logger,
     poll_interval=5,
 )
@@ -31,13 +31,14 @@ processor = CommandProcessor(
 # Create MainController (central brain)
 main_controller = MainController(
     command_processor=processor,
-    phase_data=phase_data,
+    led_monitor = led_monitor,
     sms_thread=sms_thread,
     logger=logger,
 )
 
 # Wire CommandProcessor -> MainController for events (आधी event_handler field add केलेला असेल तर)
 processor.event_handler = main_controller.handle_event
+processor.power_service = main_controller.power_service
 
 # Wire SMS side -> MainController for incoming commands
 set_controller(main_controller)
@@ -51,8 +52,7 @@ time.sleep(2)
 thread = threading.Thread(target=sms_processor, daemon=True)
 thread.start()  
 
-time.sleep(5)
-LedMonitor(poll_interval=1)       # led monitoring started at new thread
+
 time.sleep(5)
 log_sensors(sensors=SENSORS)
 time.sleep(5)
