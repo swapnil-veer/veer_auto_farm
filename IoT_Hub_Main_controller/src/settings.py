@@ -57,3 +57,18 @@ SENSORS = {
 #         'PORT': '3306',
 #     }
 # }
+
+class Config:
+    # Pump business logic
+    DEFAULT_DURATION_MIN = 30
+    MAX_QUEUE_LENGTH = 10
+    
+    # Features
+    MAINTENANCE_MODE = False
+    AUTO_MODE_ENABLED = True
+    
+    # SMS
+    SMS_CHANNEL = 'sim800l'
+    
+    # Logging
+    LOG_LEVEL = 'INFO'
