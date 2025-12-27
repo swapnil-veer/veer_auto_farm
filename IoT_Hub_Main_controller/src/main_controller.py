@@ -80,6 +80,7 @@ class MainController:
             'ctype': ctype,
             'priority': priority_map[ctype],
             'sender': sender,
+            'status': 'created',
             'terminated_by': None  
         }
         
@@ -87,6 +88,9 @@ class MainController:
             cmd['duration_sec'] = duration_minutes * 60
             cmd['remaining_sec'] = duration_minutes * 60
         
+        # TODO: db_cmd = Command(ctype=ctype, sender_phone=sender, status='created')
+        # TODO: db.session.add(db_cmd); db.session.commit()
+        # TODO: cmd['db_id'] = db_cmd.id
         return cmd
         
     def get_system_status(self) -> dict:

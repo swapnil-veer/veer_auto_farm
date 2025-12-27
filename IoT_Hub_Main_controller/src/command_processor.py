@@ -48,15 +48,19 @@ class CommandProcessor:
      # public entry point for main_controller
     def handle(self, command:dict):
         """Public entry point - MainController calls this"""
+
+         # TODO: DB - Command.create(ctype=command['ctype'], sender=..., status='queued')
+         # TODO: command['db_id'] = db_command.id
+
         ctype = command['ctype']
         self.logger.info(f"Handling command: {ctype} from {command['sender']}")
         
         if ctype == 'MANUAL_ON' or ctype == 'AUTO_ON':
             self._add_to_queue(command)
         elif ctype == 'DELETE_ONE':
-            self.delete_one()
+            self.delete_one()           # TODO: DB UPDATE current status='completed'
         elif ctype == 'DELETE_ALL':
-            self.delete_all()
+            self.delete_all()           # TODO: DB UPDATE current status='completed'
         else:
             self.logger.warning(f"Unknown ctype: {ctype}") 
             raise ValueError(f"Unknown command type: {ctype}") 
@@ -69,6 +73,7 @@ class CommandProcessor:
 
     def _add_to_queue(self, command: dict):
         """Helper: MANUAL_ON → existing queue format"""
+        # TODO: DB - UPDATE status='queued' WHERE id=command['db_id']
         if command['ctype'] == 'MANUAL_ON' and self._is_auto_running():
             # this will raise error if auto is running and we added manual command 
             raise ValueError("AUTO mode active. OFF first.")
@@ -83,12 +88,17 @@ class CommandProcessor:
             remaining_sec = None  # explicit None for auto
 
         cmd_dict = {
-            'mode': mode,  
-            'duration_sec': duration_sec ,
-            'remaining_sec': remaining_sec ,
+            'command_id': command.get('command_id'),  # NEW: DB link
+            'ctype': command['ctype'],      # NEW: Keep original type
+            'priority': command['priority'], # NEW: For future priority queue
+            'mode': 'manual' if command['ctype'] == 'MANUAL_ON' else 'auto',
+            'duration_sec': command.get('duration_sec'),
+            'remaining_sec': command.get('remaining_sec'),
             'in_progress': False,
             'start_time': None,
-            'sender': command['sender']
+            'sender': command['sender'],
+            'status': 'queued',             # NEW: DB status sync
+            'terminated_by': None
         }
 
         self.command_queue.append(cmd_dict)
@@ -96,6 +106,7 @@ class CommandProcessor:
       
     def _process_current_command(self, auto : bool):
         """Process the current command if power is available."""
+        # TODO: DB - UPDATE status='running', started_at=now() WHERE id=cmd['db_id']
         # if not self.current_command or self.current_command['remaining_sec'] <= 0:
         if not self.current_command :
             return
@@ -215,6 +226,7 @@ class CommandProcessor:
             # Dequeue next command if current is done and queue has items
             if self.current_command and self.current_command['mode'] != 'auto':
                 if self.current_command['remaining_sec'] <= 0:
+                    # TODO: DB - UPDATE status='completed', completed_at=now() WHERE id=cmd['db_id']
                     event = {
                             "type": "PUMP_COMPLETED",
                             "timestamp": time.time(),  # datetime.now().isoformat()
