@@ -28,11 +28,15 @@ class MainController:
         """
         # delete_one_command
         if re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', text, flags=re.IGNORECASE):
-            return self._handle_off(sender=sender)
+            cmd = self._create_command('DELETE_ONE', sender)
+            self.command_processor.handle(cmd)
+            return "Pump OFF request received."
 
         # delete_all_commands   
         elif re.search(r'\b(ALL OFF)', text, flags=re.IGNORECASE):
-            return self._handle_all_off(sender=sender)
+            cmd = self._create_command('DELETE_ALL', sender)
+            self.command_processor.handle(cmd)
+            return "All commands cleared."
 
         # STATUS
         elif re.search(r'\bSTATUS\b', text, flags=re.IGNORECASE):
@@ -45,15 +49,45 @@ class MainController:
                 min = int(m.group(1))
             else:
                 min = DEFAULT_DURATION
-            return self._handle_manual_on(sender=sender, minutes=min)
+            cmd = self._create_command('MANUAL_ON', sender, min)
+            try :
+                self.command_processor.handle(cmd)
+            except ValueError as err_msg:
+                return err_msg
+            return f"Request accepted: Pump ON for {min} min."
 
         # For auto mode
         elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
             # TODO: replace direct add_command call with brain.handle_incoming_sms
-            return self._handle_auto_on(sender=sender)
+            cmd = self._create_command('AUTO_ON', sender)
+            self.command_processor.handle(cmd)
+            return "Request accepted: Pump ON in AUTO mode."
 
         else:
             return self._handle_invalid(sender=sender)
+        
+    def _create_command(self, ctype: str, sender: str, duration_minutes: int = None) -> dict:
+        """Factory: SMS intent → standard command_dict
+            Creating commands for command processor     """
+        priority_map = {
+            'MANUAL_ON': 1,
+            'AUTO_ON': 2,
+            'DELETE_ONE': 3,
+            'DELETE_ALL': 4
+        }
+        
+        cmd = {
+            'ctype': ctype,
+            'priority': priority_map[ctype],
+            'sender': sender,
+            'terminated_by': None  
+        }
+        
+        if duration_minutes:
+            cmd['duration_sec'] = duration_minutes * 60
+            cmd['remaining_sec'] = duration_minutes * 60
+        
+        return cmd
         
     def get_system_status(self) -> dict:
         """
@@ -78,7 +112,7 @@ class MainController:
             "signal_strength": self.sms.get_signal_strength() or 0,
         }
         return status
-
+        
     # === COMMAND HANDLERS (internal to MainController) ===
 
     def _handle_off(self, sender: str) -> str:

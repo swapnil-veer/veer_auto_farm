@@ -14,6 +14,7 @@ class CommandProcessor:
         self.current_command = None  # Currently processing dict
         self.poll_interval = poll_interval
         self.is_running = False
+        self.is_auto_running = False  # Track AUTO mode state
         self.manual_stop = False
         self._lock = threading.Lock()
         self.logger = logger
@@ -43,7 +44,56 @@ class CommandProcessor:
 
     def reset_manual_stop(self):
         self.manual_stop = False
-                 
+        
+     # public entry point for main_controller
+    def handle(self, command:dict):
+        """Public entry point - MainController calls this"""
+        ctype = command['ctype']
+        self.logger.info(f"Handling command: {ctype} from {command['sender']}")
+        
+        if ctype == 'MANUAL_ON' or ctype == 'AUTO_ON':
+            self._add_to_queue(command)
+        elif ctype == 'DELETE_ONE':
+            self.delete_one()
+        elif ctype == 'DELETE_ALL':
+            self.delete_all()
+        else:
+            self.logger.warning(f"Unknown ctype: {ctype}") 
+            raise ValueError(f"Unknown command type: {ctype}") 
+
+    def _is_auto_running(self) -> bool:
+        """Check if currently processing AUTO command"""
+        return (self.current_command and 
+                self.current_command.get('mode') == 'auto' and 
+                self.current_command.get('in_progress', False))    
+
+    def _add_to_queue(self, command: dict):
+        """Helper: MANUAL_ON → existing queue format"""
+        if command['ctype'] == 'MANUAL_ON' and self._is_auto_running():
+            # this will raise error if auto is running and we added manual command 
+            raise ValueError("AUTO mode active. OFF first.")
+        
+        if command['ctype'] == 'MANUAL_ON':
+            mode = 'manual'
+            duration_sec = command.get('duration_sec')
+            remaining_sec = command.get('remaining_sec')
+        elif command['ctype'] == 'AUTO_ON':
+            mode = 'auto'
+            duration_sec = None
+            remaining_sec = None  # explicit None for auto
+
+        cmd_dict = {
+            'mode': mode,  
+            'duration_sec': duration_sec ,
+            'remaining_sec': remaining_sec ,
+            'in_progress': False,
+            'start_time': None,
+            'sender': command['sender']
+        }
+
+        self.command_queue.append(cmd_dict)
+        self.logger.info(f"{command['ctype']} queued: {cmd_dict}")
+      
     def _process_current_command(self, auto : bool):
         """Process the current command if power is available."""
         # if not self.current_command or self.current_command['remaining_sec'] <= 0:
