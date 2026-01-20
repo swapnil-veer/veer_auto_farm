@@ -54,6 +54,10 @@ def msg_parser(queue = sms_queue):
             # command_queue['off'].append({"sender" : dct['sender']})
             processor.delete_one()
             
+                # For auto mode
+        elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
+            processor.add_command(mode="auto", sender=sender)
+
         elif re.search(r'\b(ALL OFF)', text, flags=re.IGNORECASE):
             processor.delete_all()
 
