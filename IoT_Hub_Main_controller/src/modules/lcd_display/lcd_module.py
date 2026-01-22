@@ -166,7 +166,7 @@ class LCD:
         else:
             signal_bar = self.get_signal_symbol(status["signal_strength"])
         signal_text = signal_bar.ljust(7)[:7]
-        power_text = f"PWR:{status['power']}".center(6)[:7]
+        power_text = f"PWR:{'ON' if status['power'] else 'OFF'}".center(6)[:7]
         line1 = signal_text + power_text
         self.lcd.write_string(line1[:20])
 
@@ -190,11 +190,12 @@ class LCD:
             # self.lcd.cursor_pos = (2,0)
             elapsed = time.time() - self.startup_time
             if elapsed < 20 and not self.ip_displayed:
-                self.lcd.cursor_pos = (3, 0)
+                self.lcd.cursor_pos = (2, 0)
                 self.lcd.write_string(f"IP: {get_ip_address()}")
-                if elapsed > 15:
+                if elapsed > 30:    #ip flash time
                     self.ip_displayed = True
             else:
-                self.lcd.cursor_pos = (3, 0)
+                self.lcd.cursor_pos = (2, 0)
                 self.lcd.write_string(f"CPU: {get_cpu_temp()}")
+            time.sleep(self.poll_interval)
 

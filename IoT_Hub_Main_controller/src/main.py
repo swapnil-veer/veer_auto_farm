@@ -58,7 +58,12 @@ time.sleep(5)
 t2 = threading.Thread(target=processor.run, daemon=True)
 t2.start()
 
-while True:
-    time.sleep(2)
+try:
+    while True:
+        time.sleep(2)
+except KeyboardInterrupt:
+    config.cleanup_gpio()
+    logger.info("Main loop interrupted - cleanup already registered")
+
 
 

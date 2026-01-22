@@ -79,11 +79,14 @@ class Config:
 def get_ip_address():
     """Get local IP for current hostname."""
     try:
-        hostname = socket.gethostname()
-        ip = socket.gethostbyname(hostname)
-        return ip[:18]  # Truncate for LCD
+        # Connect to an external host (Google DNS) to determine local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip[:18]
     except:
-        return "Lookup failed"
+        return "IP ERROR"
 
 def get_cpu_temp():
     """Get Raspberry Pi CPU temp in Celsius."""

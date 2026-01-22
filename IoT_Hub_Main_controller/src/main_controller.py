@@ -41,7 +41,14 @@ class MainController:
         # STATUS
         elif re.search(r'\bSTATUS\b', text, flags=re.IGNORECASE):
             return self._handle_status(sender=sender)
-
+        
+        # For auto mode
+        elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
+            # TODO: replace direct add_command call with brain.handle_incoming_sms
+            cmd = self._create_command('AUTO_ON', sender)
+            self.command_processor.handle(cmd)
+            return "Request accepted: Pump ON in AUTO mode."
+        
         # ON with optional duration
         elif re.search(r'\b(ON|START)\b', text, flags=re.IGNORECASE):
             m = re.search(r'(\d+)', text)
@@ -55,13 +62,6 @@ class MainController:
             except ValueError as err_msg:
                 return err_msg
             return f"Request accepted: Pump ON for {min} min."
-
-        # For auto mode
-        elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
-            # TODO: replace direct add_command call with brain.handle_incoming_sms
-            cmd = self._create_command('AUTO_ON', sender)
-            self.command_processor.handle(cmd)
-            return "Request accepted: Pump ON in AUTO mode."
 
         else:
             return self._handle_invalid(sender=sender)
@@ -108,9 +108,9 @@ class MainController:
             manual_remaining_min = None
 
         status = {
-            "power": self.power_service.get_status(),
+            "power": self.power_service.is_power_available(),
             "mode": mode,                                                    # 'manual' / 'auto' / None
-            "pump_on": self.command_processor.pump_context_manager.pump_manager.get_pump_state(),  # from pump_manager
+            "pump_on": self.command_processor.pump_context_manager.relay_manager.get_pump_state(),  # from pump_manager
             "manual_remaining_min": manual_remaining_min,  # None in auto/idle
             "sim_ok": self.sms.get_sim_status(),
             "signal_strength": self.sms.get_signal_strength() or 0,
