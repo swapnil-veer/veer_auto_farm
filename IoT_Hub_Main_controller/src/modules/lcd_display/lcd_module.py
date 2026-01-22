@@ -22,6 +22,8 @@ class LCD:
         self._thread.start()
         self.logger = logger
         self.logger.info("LCD Display started background monitoring thread.")
+        self.startup_time = time.time()
+        self.ip_displayed = False
 
     def display(self, line1="", line2="", line3 = "", line4 = ""):
         """
