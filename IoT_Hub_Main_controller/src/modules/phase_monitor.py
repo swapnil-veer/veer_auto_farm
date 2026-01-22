@@ -32,6 +32,24 @@ class LedMonitor:
         self._thread.start()
         logger.info("LedMonitor started background monitoring thread.")
 
+    def is_power_available(self) -> bool:
+        """CommandProcessor साठी: Green LED ON?"""
+        global phase_data
+        return phase_data['green_led'] == 1
+    
+    def get_status(self) -> str:
+        """MainController साठी: power_ok/wait/fault"""
+        global phase_data
+        if phase_data['green_led']: return 'power_ok'
+        elif phase_data['yellow_led']: return 'power_wait'
+        elif phase_data['red_led']: return 'power_fault'
+        else: return 'power_fault'
+    
+    def get_phase_data(self) -> dict:
+        """Full phase data (legacy + future)"""
+        global phase_data
+        return phase_data.copy()
+    
     def _monitor_loop(self):
         """Background loop to update LED states."""
         global phase_data

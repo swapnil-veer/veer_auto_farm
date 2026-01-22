@@ -1,6 +1,4 @@
 import os
-import re
-
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -8,13 +6,10 @@ load_dotenv()
 ph_no_1 = "+917038835527"
 ph_no_2 = os.getenv("ph_no_2")
 
-counter = 0
-i = 0
 
 import gammu
 import time
 from logging_config import logger
-from settings import DEFAULT_DURATION
 # from command_processor import processor
 import threading
 

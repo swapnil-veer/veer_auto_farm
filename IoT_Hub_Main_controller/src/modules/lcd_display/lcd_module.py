@@ -1,35 +1,15 @@
 
 import time
 from RPLCD.i2c import CharLCD
-from ..sim800l.sim import sms_thread
-from modules.phase_monitor import phase_data
-from modules.pump_control import pump_manager
-from command_processor import processor
+from settings import get_ip_address, get_cpu_temp
 import threading
-from logging_config import logger
 
-# signal_strength = sms_thread.get_signal_strength()
-
-
-
-def get_system_status(phase_data):
-    status =  {
-        "power": "ON" if phase_data.get("green_led") == 1 else "OFF",
-        "signal": sms_thread.get_signal_strength() or 0,
-        "sim_status":  sms_thread.get_sim_status(),  
-        # "network": sms_handler.get_network_name(),
-        "pump_on": pump_manager.get_pump_state(),
-        "pump_rem": round(processor.current_command['remaining_sec']/60) if processor.current_command else False,
-        # "pump_total": pump_handler.total_today,
-        # "battery": battery_handler.get_battery_percent()
-    }
-    return status
 class LCD:
-    def __init__(self, i2c_address=0x27, poll_interval=1):
+    def __init__(self, main_controller,logger, i2c_address=0x27, poll_interval=1):
         """
         Initialize the LCD with I2C address (default: 0x27)
         """
-        print("in lcd")
+        self.main_controller = main_controller
         self.lcd = CharLCD(i2c_expander="PCF8574", address=i2c_address,
                            port=1, cols=20, rows=4, charmap="A02",
                            auto_linebreaks=True)
@@ -40,7 +20,10 @@ class LCD:
                 # Start background thread
         self._thread = threading.Thread(target=self.display_thread, daemon=True)
         self._thread.start()
-        logger.info("LCD Display started background monitoring thread.")
+        self.logger = logger
+        self.logger.info("LCD Display started background monitoring thread.")
+        self.startup_time = time.time()
+        self.ip_displayed = False
 
     def display(self, line1="", line2="", line3 = "", line4 = ""):
         """
@@ -177,21 +160,21 @@ class LCD:
         return chr(0) + chr(1) + chr(2)  # printable symbol
 
     def static_lines(self):
-        status = get_system_status(phase_data)
-        if status["sim_status"] != True:
+        status = self.main_controller.get_system_status()
+        if status["sim_ok"] != True:
             signal_bar = "NO SIM"
         else:
-            # signal = status["signal_bars"].ljust(7)[:7]
-            signal_bar = self.get_signal_symbol(status["signal"])
+            signal_bar = self.get_signal_symbol(status["signal_strength"])
         signal_text = signal_bar.ljust(7)[:7]
-        power_text = f"PWR:{status['power']}".center(6)[:7]
+        power_text = f"PWR:{'ON' if status['power'] else 'OFF'}".center(6)[:7]
         line1 = signal_text + power_text
         self.lcd.write_string(line1[:20])
 
         #line 2
+        rem_min = status['manual_remaining_min']
         if status['pump_on']:
-            line2 = f"PUMP:ON Rem:{status['pump_rem']}min"
-        elif status["power"] == "OFF" and status['pump_rem'] != False:
+            line2 = f"PUMP:ON Rem:{rem_min}min" if rem_min else "PUMP:ON IN AUTO"
+        elif status["power"] == "OFF" and rem_min is not None:
             line2 = f"PUMP:OFF WAIT PWR"
         else:
             line2 = f"PUMP:OFF"
@@ -205,5 +188,14 @@ class LCD:
                 self.lcd.cursor_pos = (i, 0)
                 self.lcd.write_string(line[:20])
             # self.lcd.cursor_pos = (2,0)
+            elapsed = time.time() - self.startup_time
+            if elapsed < 20 and not self.ip_displayed:
+                self.lcd.cursor_pos = (2, 0)
+                self.lcd.write_string(f"IP: {get_ip_address()}")
+                if elapsed > 30:    #ip flash time
+                    self.ip_displayed = True
+            else:
+                self.lcd.cursor_pos = (2, 0)
+                self.lcd.write_string(f"CPU: {get_cpu_temp()}")
             time.sleep(self.poll_interval)
 
