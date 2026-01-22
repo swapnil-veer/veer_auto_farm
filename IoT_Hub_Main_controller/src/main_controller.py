@@ -1,7 +1,5 @@
 import re
 from settings import DEFAULT_DURATION
-from logging_config import logger
-
 
 class MainController:
     """

@@ -42,11 +42,9 @@ processor.power_service = main_controller.power_service
 
 # Wire SMS side -> MainController for incoming commands
 set_controller(main_controller)
-
-
-# sim800l = SIM800L()
 time.sleep(2)
-LCD()           # Lcd thread started
+
+lcd = LCD(main_controller=main_controller, logger=logger)          # Lcd thread started
 time.sleep(2)
 
 thread = threading.Thread(target=sms_processor, daemon=True)

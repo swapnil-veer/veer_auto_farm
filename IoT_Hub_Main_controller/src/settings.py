@@ -1,5 +1,7 @@
 from pathlib import Path
 from modules.phase_monitor import phase_data
+import socket
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent
@@ -72,3 +74,22 @@ class Config:
     
     # Logging
     LOG_LEVEL = 'INFO'
+
+
+def get_ip_address():
+    """Get local IP for current hostname."""
+    try:
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        return ip[:18]  # Truncate for LCD
+    except:
+        return "Lookup failed"
+
+def get_cpu_temp():
+    """Get Raspberry Pi CPU temp in Celsius."""
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+            temp_c = int(f.read().strip()) / 1000
+        return f"{temp_c:.0f}C"
+    except:
+        return "N/A"
