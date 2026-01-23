@@ -1,7 +1,5 @@
 import re
 from settings import DEFAULT_DURATION
-from logging_config import logger
-
 
 class MainController:
     """
@@ -12,12 +10,14 @@ class MainController:
     - Reads system status (phase_monitor, CommandProcessor state)
     """
 
-    def __init__(self, command_processor, phase_data, sms_thread, logger):
+    def __init__(self, command_processor, led_monitor, sms_thread, logger):
         self.command_processor = command_processor    # CommandProcessor instance
-        self.phase_data = phase_data                  # global dict from phase_monitor
+        self.led_monitor = led_monitor
+        # self.phase_data = phase_data                  # global dict from phase_monitor
         self.sms = sms_thread
         self.logger = logger
         self._event_handler = EventHandler(sms=self.sms, logger=self.logger)
+        self.power_service = PowerStatusService(led_monitor)
 
     # === PUBLIC ENTRY POINT (for SMS layer) ===
     def handle_incoming_sms(self, sender: str, text: str) -> str:
@@ -28,16 +28,27 @@ class MainController:
         """
         # delete_one_command
         if re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', text, flags=re.IGNORECASE):
-            return self._handle_off(sender=sender)
+            cmd = self._create_command('DELETE_ONE', sender)
+            self.command_processor.handle(cmd)
+            return "Pump OFF request received."
 
         # delete_all_commands   
         elif re.search(r'\b(ALL OFF)', text, flags=re.IGNORECASE):
-            return self._handle_all_off(sender=sender)
+            cmd = self._create_command('DELETE_ALL', sender)
+            self.command_processor.handle(cmd)
+            return "All commands cleared."
 
         # STATUS
         elif re.search(r'\bSTATUS\b', text, flags=re.IGNORECASE):
             return self._handle_status(sender=sender)
-
+        
+        # For auto mode
+        elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
+            # TODO: replace direct add_command call with brain.handle_incoming_sms
+            cmd = self._create_command('AUTO_ON', sender)
+            self.command_processor.handle(cmd)
+            return "Request accepted: Pump ON in AUTO mode."
+        
         # ON with optional duration
         elif re.search(r'\b(ON|START)\b', text, flags=re.IGNORECASE):
             m = re.search(r'(\d+)', text)
@@ -45,15 +56,42 @@ class MainController:
                 min = int(m.group(1))
             else:
                 min = DEFAULT_DURATION
-            return self._handle_manual_on(sender=sender, minutes=min)
-
-        # For auto mode
-        elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
-            # TODO: replace direct add_command call with brain.handle_incoming_sms
-            return self._handle_auto_on(sender=sender)
+            cmd = self._create_command('MANUAL_ON', sender, min)
+            try :
+                self.command_processor.handle(cmd)
+            except ValueError as err_msg:
+                return err_msg
+            return f"Request accepted: Pump ON for {min} min."
 
         else:
             return self._handle_invalid(sender=sender)
+        
+    def _create_command(self, ctype: str, sender: str, duration_minutes: int = None) -> dict:
+        """Factory: SMS intent → standard command_dict
+            Creating commands for command processor     """
+        priority_map = {
+            'MANUAL_ON': 1,
+            'AUTO_ON': 2,
+            'DELETE_ONE': 3,
+            'DELETE_ALL': 4
+        }
+        
+        cmd = {
+            'ctype': ctype,
+            'priority': priority_map[ctype],
+            'sender': sender,
+            'status': 'created',
+            'terminated_by': None  
+        }
+        
+        if duration_minutes:
+            cmd['duration_sec'] = duration_minutes * 60
+            cmd['remaining_sec'] = duration_minutes * 60
+        
+        # TODO: db_cmd = Command(ctype=ctype, sender_phone=sender, status='created')
+        # TODO: db.session.add(db_cmd); db.session.commit()
+        # TODO: cmd['db_id'] = db_cmd.id
+        return cmd
         
     def get_system_status(self) -> dict:
         """
@@ -70,15 +108,15 @@ class MainController:
             manual_remaining_min = None
 
         status = {
-            "power": "ON" if self.phase_data["green_led"] == 1 else "OFF",
+            "power": self.power_service.is_power_available(),
             "mode": mode,                                                    # 'manual' / 'auto' / None
-            "pump_on": self.command_processor.pump_context_manager.pump_manager.get_pump_state(),  # from pump_manager
+            "pump_on": self.command_processor.pump_context_manager.relay_manager.get_pump_state(),  # from pump_manager
             "manual_remaining_min": manual_remaining_min,  # None in auto/idle
             "sim_ok": self.sms.get_sim_status(),
             "signal_strength": self.sms.get_signal_strength() or 0,
         }
         return status
-
+        
     # === COMMAND HANDLERS (internal to MainController) ===
 
     def _handle_off(self, sender: str) -> str:
@@ -229,6 +267,15 @@ class EventHandler:
                 self.sms.send_sms(sender, text)
         self.logger.info(f"COMMAND_DELETED_CURRENT: {data}")
 
+class PowerStatusService:
+    def __init__(self, led_monitor):
+        self.led_monitor = led_monitor
+    
+    def is_power_available(self) -> bool:
+        return self.led_monitor.is_power_available()
+    
+    def get_status(self) -> str:
+        return self.led_monitor.get_status()
 
 
 

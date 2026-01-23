@@ -7,17 +7,18 @@ class CommandProcessor:
     Uses context manager for safe relay operations.
     Runs a continuous polling loop.
     """
-    def __init__(self,pump_context_manager, phase_data, logger,poll_interval=5, event_handler=None):
+    def __init__(self,pump_context_manager, logger,poll_interval=5, event_handler=None, power_service = None):
         self.pump_context_manager = pump_context_manager
-        self.phase_data = phase_data
         self.command_queue = []  # List of dicts: [{'mode': 'manual', 'duration_sec': 300, 'remaining_sec': 300, 'in_progress': False, 'start_time': None}, ...]
         self.current_command = None  # Currently processing dict
         self.poll_interval = poll_interval
         self.is_running = False
+        self.is_auto_running = False  # Track AUTO mode state
         self.manual_stop = False
         self._lock = threading.Lock()
         self.logger = logger
         self.event_handler = event_handler  # callable or None
+        self.power_service = power_service
 
     def add_command(self,duration_minutes = None, mode = "manual", sender = None):
         """Add a new one-time command to the queue as a dict."""
@@ -43,15 +44,75 @@ class CommandProcessor:
 
     def reset_manual_stop(self):
         self.manual_stop = False
-                 
+        
+     # public entry point for main_controller
+    def handle(self, command:dict):
+        """Public entry point - MainController calls this"""
+
+         # TODO: DB - Command.create(ctype=command['ctype'], sender=..., status='queued')
+         # TODO: command['db_id'] = db_command.id
+
+        ctype = command['ctype']
+        self.logger.info(f"Handling command: {ctype} from {command['sender']}")
+        
+        if ctype == 'MANUAL_ON' or ctype == 'AUTO_ON':
+            self._add_to_queue(command)
+        elif ctype == 'DELETE_ONE':
+            self.delete_one()           # TODO: DB UPDATE current status='completed'
+        elif ctype == 'DELETE_ALL':
+            self.delete_all()           # TODO: DB UPDATE current status='completed'
+        else:
+            self.logger.warning(f"Unknown ctype: {ctype}") 
+            raise ValueError(f"Unknown command type: {ctype}") 
+
+    def _is_auto_running(self) -> bool:
+        """Check if currently processing AUTO command"""
+        return (self.current_command and 
+                self.current_command.get('mode') == 'auto' and 
+                self.current_command.get('in_progress', False))    
+
+    def _add_to_queue(self, command: dict):
+        """Helper: MANUAL_ON → existing queue format"""
+        # TODO: DB - UPDATE status='queued' WHERE id=command['db_id']
+        if command['ctype'] == 'MANUAL_ON' and self._is_auto_running():
+            # this will raise error if auto is running and we added manual command 
+            raise ValueError("AUTO mode active. OFF first.")
+        
+        if command['ctype'] == 'MANUAL_ON':
+            mode = 'manual'
+            duration_sec = command.get('duration_sec')
+            remaining_sec = command.get('remaining_sec')
+        elif command['ctype'] == 'AUTO_ON':
+            mode = 'auto'
+            duration_sec = None
+            remaining_sec = None  # explicit None for auto
+
+        cmd_dict = {
+            'command_id': command.get('command_id'),  # NEW: DB link
+            'ctype': command['ctype'],      # NEW: Keep original type
+            'priority': command['priority'], # NEW: For future priority queue
+            'mode': 'manual' if command['ctype'] == 'MANUAL_ON' else 'auto',
+            'duration_sec': command.get('duration_sec'),
+            'remaining_sec': command.get('remaining_sec'),
+            'in_progress': False,
+            'start_time': None,
+            'sender': command['sender'],
+            'status': 'queued',             # NEW: DB status sync
+            'terminated_by': None
+        }
+
+        self.command_queue.append(cmd_dict)
+        self.logger.info(f"{command['ctype']} queued: {cmd_dict}")
+      
     def _process_current_command(self, auto : bool):
         """Process the current command if power is available."""
+        # TODO: DB - UPDATE status='running', started_at=now() WHERE id=cmd['db_id']
         # if not self.current_command or self.current_command['remaining_sec'] <= 0:
         if not self.current_command :
             return
         self.logger.info(f"Starting processing : {self.current_command}")
 
-        if self.phase_data['green_led'] == 1:
+        if self.power_service.is_power_available():
             with self.pump_context_manager:
                 start_time = time.time()
                 self.current_command['in_progress'] = True
@@ -93,7 +154,7 @@ class CommandProcessor:
                         start_time = time.time()  # Reset start time for next iteration
 
                 
-                    if self.phase_data['green_led'] != 1:                   
+                    if not self.power_service.is_power_available():                   
                         # Power loss: rewrite command with remaining time
                         self.current_command['in_progress'] = False
                         if self.event_handler and self.current_command:
@@ -165,6 +226,7 @@ class CommandProcessor:
             # Dequeue next command if current is done and queue has items
             if self.current_command and self.current_command['mode'] != 'auto':
                 if self.current_command['remaining_sec'] <= 0:
+                    # TODO: DB - UPDATE status='completed', completed_at=now() WHERE id=cmd['db_id']
                     event = {
                             "type": "PUMP_COMPLETED",
                             "timestamp": time.time(),  # datetime.now().isoformat()
