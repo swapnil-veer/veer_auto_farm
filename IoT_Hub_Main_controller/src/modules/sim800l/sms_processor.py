@@ -12,6 +12,41 @@ def set_controller(controller):
 
 def msg_parser(queue=sms_queue):
     while True:
+            # TODO 1: Fetch AUTHORIZED + unprocessed SMS (oldest first)
+            # authorized_sms = SmsLog.query.filter_by(
+            #     status=SmsStatus.AUTHORIZED,
+            #     is_processed=False
+            # ).order_by(SmsLog.created_at.asc()).limit(5).all()
+            
+            # for sms_log in authorized_sms:
+            #     sender = sms_log.phone
+            #     text = sms_log.message
+            #     
+            #     logger.info(f"Processing SMS {sms_log.id}: {text}")
+            #     
+            #     # TODO 2: MainController process
+            #     if main_controller:
+            #         reply = main_controller.handle_incoming_sms(sender, text)
+            #         
+            #         # TODO 3: Mark PROCESSED
+            #         sms_log.status = SmsStatus.PROCESSED
+            #         sms_log.processed_at = datetime.utcnow()
+            #         db.session.commit()
+            #         
+            #         if reply:
+            #             sms_thread.send_sms(sender, reply)
+            #             
+            #             # TODO 4: Log OUTGOING SMS
+            #             # outgoing = SmsLog(
+            #             #     direction=SmsDirection.OUTGOING,
+            #             #     phone=sender,
+            #             #     message=reply,
+            #             #     status=SmsStatus.SENT,
+            #             #     related_sms_id=sms_log.id,
+            #             #     user_id=sms_log.user_id
+            #             # )
+            #             # db.session.add(outgoing)
+            #             # db.session.commit()
         with _sms_lock:
             if not queue:
                 break

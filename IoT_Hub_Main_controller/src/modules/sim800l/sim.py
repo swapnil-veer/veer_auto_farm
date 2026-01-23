@@ -1,5 +1,9 @@
 import os
-
+from database import db
+from database.models.sms_log import SmsLog, SmsDirection, SmsStatus
+from database.models.user import User
+from datetime import datetime
+from logging_config import logger
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -9,7 +13,7 @@ ph_no_2 = os.getenv("ph_no_2")
 
 import gammu
 import time
-from logging_config import logger
+from logging_config import self.logger
 # from command_processor import processor
 import threading
 
@@ -34,7 +38,8 @@ class FarmSMSHandler:
         self._init_sm()  # Initial
         self._thread = threading.Thread(target=self._sms_loop, daemon=True)
         self._thread.start()
-        logger.info("SMS background thread started")
+        self.logger = logger
+        self.logger.info("SMS background thread started")
 
     def _init_sm(self):
         self.sm = gammu.StateMachine()
@@ -42,10 +47,10 @@ class FarmSMSHandler:
         try:
             self.sm.Init()
             self._update_status(True)
-            logger.info(f"Sim Connected")
+            self.logger.info(f"Sim Connected")
 
         except Exception as e:
-            logger.error(f"Init failed: {e}")
+            self.logger.error(f"Init failed: {e}")
             self._update_status(False)
 
 
@@ -63,9 +68,9 @@ class FarmSMSHandler:
     def _update_status(self, boolean:bool):
         self.connected = boolean
         if self.connected:
-            logger.info("SIM connected")
+            self.logger.info("SIM connected")
         else:
-            logger.error("SIM not connected")
+            self.logger.error("SIM not connected")
 
     def get_sim_status(self):
         return self.connected  # Fast var check; no blocking call
@@ -81,7 +86,7 @@ class FarmSMSHandler:
             self._update_status(False)
             return None
         except Exception as e:
-            logger.error(f"Signal error: {e}")
+            self.logger.error(f"Signal error: {e}")
             self._update_status(False)
             return None  
 
@@ -89,7 +94,19 @@ class FarmSMSHandler:
         return self.signal
 
     def send_sms(self, number, text):
-        """Send SMS with error handling"""
+        """Send SMS with error handling"""    
+        # TODO 1: Create OUTGOING SmsLog FIRST
+        # outgoing = SmsLog(
+        #     direction=SmsDirection.OUTGOING,
+        #     phone=number,
+        #     message=text,
+        #     status=SmsStatus.SENDING,
+        #     related_sms_id=related_sms_id,
+        #     user_id=user_id
+        # )
+        # db.session.add(outgoing)
+        # db.session.commit()
+        # outgoing_id = outgoing.id
         def _worker():
             message = {
                 "Text": text,
@@ -98,11 +115,21 @@ class FarmSMSHandler:
             }
             try:
                 self.sm.SendSMS(message)
-                logger.info(f"msg sent to {number} text : {text}")
+                # TODO 2: Update SENT status
+                # outgoing.status = SmsStatus.SENT
+                # outgoing.sent_at = datetime.utcnow()
+                # db.session.commit()
+                # self.logger.info(f"SMS sent to {number}, log_id={outgoing_id}")
+                self.logger.info(f"msg sent to {number} text : {text}")
             except gammu.ERR_TIMEOUT:
                 self.connected = False
             except Exception as e:
-                logger.error(f"SMS error: {e}")
+                # TODO 3: Update FAILED status
+                # outgoing.status = SmsStatus.FAILED
+                # outgoing.error = str(e)
+                # db.session.commit()
+                # self.logger.error(f"SMS failed to {number}: {e}")
+                self.logger.error(f"SMS error: {e}")
         # Launch worker thread
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
@@ -137,13 +164,32 @@ class FarmSMSHandler:
                 state = m["State"]
                 if state != "UnRead":
                     continue
-                logger.info(f"sender: {sender}, msg: {text}")
+                self.logger.info(f"sender: {sender}, msg: {text}")
+            # TODO 1: SmsLog INSERT (status='received')
+            # sms_log = SmsLog(direction=SmsDirection.INCOMING, phone=sender, message=text, status=SmsStatus.RECEIVED)
+            # db.session.add(sms_log)
+            # db.session.commit()
+            # sms_log_id = sms_log.id
+            
+            # TODO 2: User table authorization (NEW!)
+            # user = User.query.filter_by(phone=sender, is_active=True).first()
+            # if user:
+            #     sms_log.user_id = user.id
+            #     sms_log.status = SmsStatus.AUTHORIZED
+            #     sms_log.is_authorized = True
+            #     db.session.commit()
+
+            # else:
+            #     sms_log.status = SmsStatus.UNAUTHORIZED
+            #     db.session.commit()
+            #     self.logger.info(f"Unauthorized: {sender}")
+            # self.sm.DeleteSMS(m["Folder"], m["Location"])
                 if sender in self.ALLOWED_NOS.values():
                     with self._lock:
                         sms_queue.append(m)
                     # self._msg_parser(sender, text)
                 else:
-                    logger.info(f"Unauthorized: {sender}")
+                    self.logger.info(f"Unauthorized: {sender}")
                 # self.sm.DeleteSMS(Folder=0, Location=m["Location"])
                 self.sm.DeleteSMS(m["Folder"], m["Location"])
         except gammu.ERR_TIMEOUT:
@@ -151,7 +197,7 @@ class FarmSMSHandler:
         except gammu.ERR_EMPTYSMSLOCATION:
             pass
         except Exception as e:
-            logger.error(f"SMS loop error: {e}")
+            self.logger.error(f"SMS loop error: {e}")
         time.sleep(2)  # Poll interval
         
     def _sms_loop(self):

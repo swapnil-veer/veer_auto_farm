@@ -1,5 +1,6 @@
 import time
 import threading
+from logging_config import logger
 
 class CommandProcessor:
     """
@@ -7,7 +8,7 @@ class CommandProcessor:
     Uses context manager for safe relay operations.
     Runs a continuous polling loop.
     """
-    def __init__(self,pump_context_manager, logger,poll_interval=5, event_handler=None, power_service = None):
+    def __init__(self,pump_context_manager,poll_interval=5, event_handler=None, power_service = None):
         self.pump_context_manager = pump_context_manager
         self.command_queue = []  # List of dicts: [{'mode': 'manual', 'duration_sec': 300, 'remaining_sec': 300, 'in_progress': False, 'start_time': None}, ...]
         self.current_command = None  # Currently processing dict
