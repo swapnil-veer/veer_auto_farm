@@ -13,6 +13,8 @@ class SmsStatus(Enum):
     UNAUTHORIZED = 'unauthorized'
     PROCESSED = 'processed'
     HANDLED = 'handled'
+    SENT = 'sent'
+    FAILED = 'failed'
 
 class SmsLog(db.Model):
     __tablename__ = 'sms_log'
@@ -27,12 +29,16 @@ class SmsLog(db.Model):
     
     # Foreign Keys
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    related_sms_id = db.Column(db.Integer, 
+                              db.ForeignKey('sms_log.id'), 
+                              nullable=True)
     
     # Status tracking
     status = db.Column(db.Enum(SmsStatus), default=SmsStatus.RECEIVED, nullable=False)
     is_authorized = db.Column(db.Boolean, default=False)
     is_processed = db.Column(db.Boolean, default=False)
-    
+ 
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     processed_at = db.Column(db.DateTime, nullable=True)
@@ -44,6 +50,7 @@ class SmsLog(db.Model):
     __table_args__ = (
         db.Index('idx_direction_status', 'direction', 'status'),
         db.Index('idx_phone_created', 'phone', 'created_at'),
+        db.Index('idx_related_sms', 'related_sms_id'),
     )
     
     def __repr__(self):
