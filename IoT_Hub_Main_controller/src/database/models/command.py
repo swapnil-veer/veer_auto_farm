@@ -44,7 +44,8 @@ class Command(db.Model):
     
     # Foreign Keys (nullable)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    sms_id = db.Column(db.Integer, db.ForignKey('sms_log.id'), nullable=True)
+    sms_id = db.Column(db.Integer, db.ForeignKey('sms_log.id'), nullable=True)
+    sender_phone = db.Column(db.String(20), nullable=False, index=True)
     terminated_by = db.Column(db.Integer, db.ForeignKey('command.id'), nullable=True)  
     
     __table_args__ = (
