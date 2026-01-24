@@ -1,7 +1,5 @@
-# sms_service.py
 from logging_config import logger
 import threading
-import time
 from datetime import datetime
 from database import db
 from database.models.sms_log import SmsLog, SmsStatus
@@ -37,16 +35,16 @@ class SMSService:
     def _process_next_sms(self):
         """Process AUTHORIZED → PROCESSED (MainController handles SMS)"""
         authorized_sms = SmsLog.query.filter_by(
-            status=SmsStatus.AUTHORIZED,
-            is_processed=False
-        ).order_by(SmsLog.created_at.asc()).limit(5).all()
+                            status=SmsStatus.AUTHORIZED,
+                            is_processed=False
+                             ).order_by(SmsLog.created_at.asc()).limit(5).all()
         
         for sms_log in authorized_sms:
             try:
                 self.logger.info(f"Processing SMS {sms_log.id}: {sms_log.message[:50]}...")
                 
                 # MainController: Parse + Command + Send SMS + Log outgoing
-                self.main_controller.handle_incoming_sms(
+                reply = self.main_controller.handle_incoming_sms(
                     sender=sms_log.phone, 
                     text=sms_log.message, 
                     sms_log=sms_log
@@ -54,9 +52,11 @@ class SMSService:
                 
                 # Mark PROCESSED (MainController handles SMS sending)
                 sms_log.status = SmsStatus.PROCESSED
+                sms_log.is_processed = True
                 sms_log.processed_at = datetime.utcnow()
                 db.session.commit()
-                
+                if reply:
+                        self.sms_handler.send_sms(sms_log.phone, reply, related_sms_id=sms_log.id, user_id=sms_log.user_id)
                 self.logger.info(f"SMS {sms_log.id} processed successfully")
                 
             except Exception as e:

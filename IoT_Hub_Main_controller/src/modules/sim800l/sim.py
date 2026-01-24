@@ -13,8 +13,6 @@ ph_no_2 = os.getenv("ph_no_2")
 
 import gammu
 import time
-from logging_config import self.logger
-# from command_processor import processor
 import threading
 
 
@@ -27,14 +25,14 @@ class FarmSMSHandler:
         "secondary": ph_no_2
     }
 
-    def __init__(self):
+    def __init__(self,poll_interval = 2):
         # Init GSM with retries
         # self.sm = gammu.StateMachine()
         # self.sm.ReadConfig()
         self.connected = False
         self.signal = 0
         self._lock = threading.Lock()
-
+        self.poll_interval = poll_interval
         self._init_sm()  # Initial
         self._thread = threading.Thread(target=self._sms_loop, daemon=True)
         self._thread.start()
@@ -93,20 +91,20 @@ class FarmSMSHandler:
     def get_signal_strength(self):
         return self.signal
 
-    def send_sms(self, number, text):
+    def send_sms(self, number, text, related_sms_id=None, user_id=None):
         """Send SMS with error handling"""    
         # TODO 1: Create OUTGOING SmsLog FIRST
-        # outgoing = SmsLog(
-        #     direction=SmsDirection.OUTGOING,
-        #     phone=number,
-        #     message=text,
-        #     status=SmsStatus.SENDING,
-        #     related_sms_id=related_sms_id,
-        #     user_id=user_id
-        # )
-        # db.session.add(outgoing)
-        # db.session.commit()
-        # outgoing_id = outgoing.id
+        outgoing = SmsLog(
+            direction=SmsDirection.OUTGOING,
+            phone=number,
+            message=text,
+            status=SmsStatus.SENDING,
+            related_sms_id=related_sms_id,
+            user_id=user_id
+        )
+        db.session.add(outgoing)
+        db.session.commit()
+        outgoing_id = outgoing.id
         def _worker():
             message = {
                 "Text": text,
@@ -115,24 +113,27 @@ class FarmSMSHandler:
             }
             try:
                 self.sm.SendSMS(message)
-                # TODO 2: Update SENT status
-                # outgoing.status = SmsStatus.SENT
-                # outgoing.sent_at = datetime.utcnow()
-                # db.session.commit()
-                # self.logger.info(f"SMS sent to {number}, log_id={outgoing_id}")
-                self.logger.info(f"msg sent to {number} text : {text}")
+                #TODO 2: Update SENT status
+                outgoing.status = SmsStatus.SENT
+                outgoing.sent_at = datetime.utcnow()
+                db.session.commit()
+                self.logger.info(f"SMS sent to {number}, log_id={outgoing_id}")
+                # self.logger.info(f"msg sent to {number} text : {text}")
             except gammu.ERR_TIMEOUT:
                 self.connected = False
+                outgoing.status = SmsStatus.FAILED
+                outgoing.error_info = "Timeout - SIM disconnected"
+                db.session.commit()
             except Exception as e:
                 # TODO 3: Update FAILED status
-                # outgoing.status = SmsStatus.FAILED
-                # outgoing.error = str(e)
-                # db.session.commit()
-                # self.logger.error(f"SMS failed to {number}: {e}")
-                self.logger.error(f"SMS error: {e}")
+                outgoing.status = SmsStatus.FAILED
+                outgoing.error = str(e)
+                db.session.commit()
+                self.logger.error(f"SMS failed to {number}: {e}, log_id={outgoing_id}")
         # Launch worker thread
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
+        return outgoing_id
 
     def check_inbox(self):
         """Check inbox and process commands"""
@@ -165,32 +166,21 @@ class FarmSMSHandler:
                 if state != "UnRead":
                     continue
                 self.logger.info(f"sender: {sender}, msg: {text}")
-            # TODO 1: SmsLog INSERT (status='received')
-            # sms_log = SmsLog(direction=SmsDirection.INCOMING, phone=sender, message=text, status=SmsStatus.RECEIVED)
-            # db.session.add(sms_log)
-            # db.session.commit()
-            # sms_log_id = sms_log.id
-            
-            # TODO 2: User table authorization (NEW!)
-            # user = User.query.filter_by(phone=sender, is_active=True).first()
-            # if user:
-            #     sms_log.user_id = user.id
-            #     sms_log.status = SmsStatus.AUTHORIZED
-            #     sms_log.is_authorized = True
-            #     db.session.commit()
+                # SmsLog INSERT (status='received')
+                sms_log = SmsLog(direction=SmsDirection.INCOMING, phone=sender, message=text, status=SmsStatus.RECEIVED)
+                db.session.add(sms_log)
+                db.session.commit()
 
-            # else:
-            #     sms_log.status = SmsStatus.UNAUTHORIZED
-            #     db.session.commit()
-            #     self.logger.info(f"Unauthorized: {sender}")
-            # self.sm.DeleteSMS(m["Folder"], m["Location"])
-                if sender in self.ALLOWED_NOS.values():
-                    with self._lock:
-                        sms_queue.append(m)
-                    # self._msg_parser(sender, text)
+                #User table authorization (NEW!)
+                user = User.query.filter_by(phone=sender, is_active=True).first()
+                if user:
+                    sms_log.user_id = user.id
+                    sms_log.status = SmsStatus.AUTHORIZED
+                    sms_log.is_authorized = True
                 else:
+                    sms_log.status = SmsStatus.UNAUTHORIZED
                     self.logger.info(f"Unauthorized: {sender}")
-                # self.sm.DeleteSMS(Folder=0, Location=m["Location"])
+                db.session.commit()
                 self.sm.DeleteSMS(m["Folder"], m["Location"])
         except gammu.ERR_TIMEOUT:
             self.connected = False
@@ -198,12 +188,9 @@ class FarmSMSHandler:
             pass
         except Exception as e:
             self.logger.error(f"SMS loop error: {e}")
-        time.sleep(2)  # Poll interval
         
     def _sms_loop(self):
         while True:
             self.check_inbox()
-
-sms_thread = FarmSMSHandler()
+            time.sleep(self.poll_interval)  # Poll interval
     
-# sms_thread = FarmSMSHandler
