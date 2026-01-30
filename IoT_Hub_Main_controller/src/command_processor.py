@@ -145,7 +145,12 @@ class CommandProcessor:
                     db_cmd.start_time = datetime.utcnow()
                     self.db_session.commit()
                     
-                    self._emit_event("PUMP_STARTED", db_cmd)  # Event first!
+                    self._emit_event("PUMP_STARTED", {
+                                    "command_id": db_cmd.id,
+                                    "sender": db_cmd.sender_phone,
+                                    "mode": "manual" if db_cmd.ctype == CommandType.MANUAL_ON else "auto",
+                                    "duration_min": db_cmd.duration_sec // 60
+                                })
                     self.logger.info(f"Pump ON: Command #{db_cmd.id}, mode= {db_cmd.mode}")
                     
                     while True:
