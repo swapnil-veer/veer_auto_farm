@@ -1,6 +1,8 @@
 import time
 import threading
 from logging_config import logger
+from database.models.command import Command, CommandStatus, CommandType
+from datetime import datetime
 
 class CommandProcessor:
     """
@@ -20,19 +22,6 @@ class CommandProcessor:
         self.logger = logger
         self.event_handler = event_handler  # callable or None
         self.power_service = power_service
-
-    def add_command(self,duration_minutes = None, mode = "manual", sender = None):
-        """Add a new one-time command to the queue as a dict."""
-        command_dict = {
-            'mode' : mode,
-            'duration_sec': duration_minutes * 60,
-            'remaining_sec': duration_minutes * 60,
-            'in_progress': False,
-            'start_time': None,
-            'sender': sender
-        }
-        self.command_queue.append(command_dict)
-        self.logger.info(f"Command added: {command_dict}")
  
     def delete_one(self):
         if self.current_command:
@@ -45,228 +34,286 @@ class CommandProcessor:
 
     def reset_manual_stop(self):
         self.manual_stop = False
-        
-     # public entry point for main_controller
-    def handle(self, command:dict):
-        """Public entry point - MainController calls this"""
-
-         # TODO: DB - Command.create(ctype=command['ctype'], sender=..., status='queued')
-         # TODO: command['db_id'] = db_command.id
-
-        ctype = command['ctype']
-        self.logger.info(f"Handling command: {ctype} from {command['sender']}")
-        
-        if ctype == 'MANUAL_ON' or ctype == 'AUTO_ON':
-            self._add_to_queue(command)
-        elif ctype == 'DELETE_ONE':
-            self.delete_one()           # TODO: DB UPDATE current status='completed'
-        elif ctype == 'DELETE_ALL':
-            self.delete_all()           # TODO: DB UPDATE current status='completed'
-        else:
-            self.logger.warning(f"Unknown ctype: {ctype}") 
-            raise ValueError(f"Unknown command type: {ctype}") 
-
-    def _is_auto_running(self) -> bool:
-        """Check if currently processing AUTO command"""
-        return (self.current_command and 
-                self.current_command.get('mode') == 'auto' and 
-                self.current_command.get('in_progress', False))    
-
-    def _add_to_queue(self, command: dict):
-        """Helper: MANUAL_ON → existing queue format"""
-        # TODO: DB - UPDATE status='queued' WHERE id=command['db_id']
-        if command['ctype'] == 'MANUAL_ON' and self._is_auto_running():
-            # this will raise error if auto is running and we added manual command 
-            raise ValueError("AUTO mode active. OFF first.")
-        
-        if command['ctype'] == 'MANUAL_ON':
-            mode = 'manual'
-            duration_sec = command.get('duration_sec')
-            remaining_sec = command.get('remaining_sec')
-        elif command['ctype'] == 'AUTO_ON':
-            mode = 'auto'
-            duration_sec = None
-            remaining_sec = None  # explicit None for auto
-
-        cmd_dict = {
-            'command_id': command.get('command_id'),  # NEW: DB link
-            'ctype': command['ctype'],      # NEW: Keep original type
-            'priority': command['priority'], # NEW: For future priority queue
-            'mode': 'manual' if command['ctype'] == 'MANUAL_ON' else 'auto',
-            'duration_sec': command.get('duration_sec'),
-            'remaining_sec': command.get('remaining_sec'),
-            'in_progress': False,
-            'start_time': None,
-            'sender': command['sender'],
-            'status': 'queued',             # NEW: DB status sync
-            'terminated_by': None
-        }
-
-        self.command_queue.append(cmd_dict)
-        self.logger.info(f"{command['ctype']} queued: {cmd_dict}")
-      
-    def _process_current_command(self, auto : bool):
-        """Process the current command if power is available."""
-        # TODO: DB - UPDATE status='running', started_at=now() WHERE id=cmd['db_id']
-        # if not self.current_command or self.current_command['remaining_sec'] <= 0:
-        if not self.current_command :
-            return
-        self.logger.info(f"Starting processing : {self.current_command}")
-
-        if self.power_service.is_power_available():
-            with self.pump_context_manager:
-                start_time = time.time()
-                self.current_command['in_progress'] = True
-                self.current_command['start_time'] = start_time
-
-                self.logger.info(f"Pump ON: mode={self.current_command.get('mode')} sender={self.current_command.get('sender')}")
-
-                # --- PUMP_STARTED event ---
-                if self.event_handler and self.current_command:
-                    cmd = self.current_command
-                    event = {
-                        "type": "PUMP_STARTED",
-                        "timestamp": time.time(),  # datetime.now().isoformat()
-                        "data": {
-                            "sender": cmd.get("sender"),
-                            "mode": cmd.get("mode"),
-                            "duration_min": (
-                                round(cmd["remaining_sec"] / 60)
-                                if cmd.get("mode") == "manual" else None
-                            ),
-                        },
-                    }
-                    self.event_handler(event)
-                # --- /PUMP_STARTED event ---
-                
-                while True:
-                    if not auto:
-                        if self.current_command['remaining_sec'] <= 0:
-                            break
-                        sleep_time = min(self.poll_interval, self.current_command['remaining_sec'])
-                    else:
-                        sleep_time = self.poll_interval
-                    time.sleep((sleep_time))
-
-                    if not auto:
-                        # rewrite current command with remaining sec 
-                        elapsed = time.time() - start_time
-                        self.current_command['remaining_sec'] = max(0, self.current_command['remaining_sec'] - elapsed)
-                        start_time = time.time()  # Reset start time for next iteration
-
-                
-                    if not self.power_service.is_power_available():                   
-                        # Power loss: rewrite command with remaining time
-                        self.current_command['in_progress'] = False
-                        if self.event_handler and self.current_command:
-                            cmd = self.current_command
-                            event = {
-                            "type": "PUMP_ABORTED_POWER_LOSS",
-                            "timestamp": time.time(),  # datetime.now().isoformat()
-                            "data": {
-                                "sender": cmd.get("sender"),
-                                "mode": cmd.get("mode"),
-                                "duration_min": (round(cmd["remaining_sec"] / 60) if cmd.get("mode") == "manual" else None
-                                        ),
-                                    },
-                                }
-                            self.event_handler(event)
-                        self.logger.info("Power loss detected, command paused with remaining time.")
-
-                        return  # Exit context and wait for next poll
-                    
-                    if self.manual_stop == True:
-                        sender = self.current_command.get('sender')
-                        copy_cmd = dict(self.current_command)
-
-                        if self.event_handler and self.current_command:      
-                            cmd = self.current_command
-                            event = {
-                                "type": "PUMP_AUTO_STOPPED" if auto else "PUMP_ABORTED_MANUAL_STOP",
-                                "timestamp": time.time(),
-                                "data": {
-                                    "sender": cmd.get("sender"),
-                                    "mode": cmd.get("mode"),
-                                    "duration_min": round(cmd["remaining_sec"] / 60) if cmd.get("mode") == "manual" else None,
-                                },
-                            }
-                            self.event_handler(event)
-                        
-                        self.current_command = None                       
-                        self.reset_manual_stop()
-                        return
-
-                # Update remaining based on actual elapsed
-                self.current_command['in_progress'] = False
-
-
-        elif self.manual_stop == True:
-            if self.event_handler and self.current_command:
-                cmd = self.current_command
-                event = {
-                    "type": "COMMAND_DELETED_CURRENT",
-                    "timestamp": time.time(),
-                    "data": {
-                        "sender": cmd.get("sender"),
-                        "mode": cmd.get("mode"),
-                        "duration_min": round(cmd["remaining_sec"] / 60) if cmd.get("mode") == "manual" else None,
-                    },
-                }
-                self.event_handler(event)
-            self.current_command = None
-            self.reset_manual_stop()
-            return
-        else:
-            self.logger.info("Waiting for power to process command.")
-
-    def run(self):
-        """Main continuous polling loop to process commands sequentially."""
-        self.is_running = True
-        self.logger.info("CommandProcessor started. Running continuously...")
-        while self.is_running:
-            # Dequeue next command if current is done and queue has items
-            if self.current_command and self.current_command['mode'] != 'auto':
-                if self.current_command['remaining_sec'] <= 0:
-                    # TODO: DB - UPDATE status='completed', completed_at=now() WHERE id=cmd['db_id']
-                    event = {
-                            "type": "PUMP_COMPLETED",
-                            "timestamp": time.time(),  # datetime.now().isoformat()
-                            "data": {
-                                "sender": self.current_command.get("sender"),
-                                "mode": self.current_command.get("mode"),
-                                "actual_min":  (
-                                    round(self.current_command["duration_sec"] / 60)),
-                                "duration_min": (
-                                    round(self.current_command["duration_sec"] / 60)
-                                    if self.current_command.get("mode") == "manual" else None
-                                ),
-                            },
-                            }
-                    if self.event_handler:
-                        self.event_handler(event)
-                    self.logger.info(f"Command segment completed. Remaining: {self.current_command['remaining_sec']} seconds.")
-                    self.current_command = None
-
-            time.sleep(5)   # time for delete all execute if abailable
-            with self._lock:
-                if not self.current_command and self.command_queue:
-                    self.current_command = self.command_queue.pop(0)
-                    # self._print_command(self.current_command, "Dequeued and set as current")
-
-            # Process current if exists
-            if self.current_command:
-                if self.current_command['mode'] == 'auto':
-                    self._process_current_command(auto=True)
-                else:
-                    self._process_current_command(auto=False)
-
-            time.sleep(self.poll_interval)
-
-        print("CommandProcessor stopped.")
 
     def stop(self):
         """Stop the processor."""
         self.is_running = False
+      
+    def get_command(self, command_id: int) -> dict:
+        """Fetch a Command by ID and return it as a dict."""
+        db_cmd = self.db_session.query(Command).get(command_id)
+        if not db_cmd:
+            return {}
+        return db_cmd
+
+    def _create_command(self, ctype: str, sender: str, duration_minutes: int = None, sms_log_id: int = None, user_id: int = None) -> dict:
+        """Factory: SMS intent → standard command_dict
+            Creating commands for command processor     """
+        priority_map = {
+            'MANUAL_ON': 1,
+            'AUTO_ON': 2,
+            'DELETE_ONE': 3,
+            'DELETE_ALL': 4
+        }
+
+        # DB CREATE (NEW)
+        db_cmd = Command(
+            ctype=ctype,
+            priority=priority_map[ctype],
+            sender_phone=sender,
+            sms_log_id=sms_log_id,     # Optional FK
+            user_id=user_id,           # Optional FK
+            status=CommandStatus.CREATED,
+            duration_sec=None,
+            remaining_sec=duration_minutes * 60 if duration_minutes else None
+        )
+        self.db_session.add(db_cmd)
+        self.db_session.commit()
+        return db_cmd
+        
+    
+     # public entry point for main_controller
+    def handle(self, ctype: str, sender: str, duration_minutes: int = None, sms_log_id: int = None, user_id: int = None):
+        """Public entry point - MainController calls this"""
+        db_cmd = self._create_command(ctype=ctype,sender = sender, duration_minutes = duration_minutes, sms_log_id=sms_log_id, user_id = user_id)
+
+        self.logger.info(f"Handling command: {db_cmd.id} from {user_id}")
+
+        if ctype == CommandType.MANUAL_ON or ctype == CommandType.AUTO_ON:
+            db_cmd.status = CommandStatus.QUEUED 
+            self._emit_event(event_type="COMMAND_QUEUED", details={  # #command added to queue msg to user!
+                    "command_id": db_cmd.id,
+                    "ctype": db_cmd.ctype.value,
+                    "duration_min": db_cmd.duration_sec // 60 if db_cmd.duration_sec else None,
+                    "sender": db_cmd.sender_phone,
+                    "position": self._get_queue_position(db_cmd.id)  # Bonus: queue position
+                })  
+        elif ctype == CommandType.DELETE_ONE:
+            db_cmd.status = CommandStatus.COMPLETED
+            self._delete_one()           
+        elif ctype == CommandType.DELETE_ALL:
+            db_cmd.status = CommandStatus.COMPLETED
+            self._delete_all()           
+        else:
+            self.logger.warning(f"Unknown ctype: {ctype}") 
+            raise ValueError(f"Unknown command type: {ctype}") 
+        self.db_session.commit()
 
 
+    def run(self):
+        """Main loop: Resume ABORTED → Process QUEUED"""
+        self.is_running = True
+        self.logger.info("CommandProcessor started. Running continuously...")
+        
+        while self.is_running:
+            # 1. RESUME ABORTED (power loss recovery)
+            aborted_cmd = self.db_session.query(Command).filter(
+                Command.status == CommandStatus.ABORTED
+            ).order_by(Command.priority, Command.created_at).first()
+            
+            if aborted_cmd:
+                self.logger.info(f"Resuming ABORTED command #{aborted_cmd.id}")
+                self._process_db_command(aborted_cmd)
+                continue
+            
+            # 2. NEW COMMANDS
+            queued_cmd = self.db_session.query(Command).filter(
+                Command.status == CommandStatus.QUEUED
+            ).order_by(Command.priority, Command.created_at).first()
+            
+            if queued_cmd:
+                self._process_db_command(queued_cmd)
+            
+            time.sleep(self.poll_interval)
 
+
+    def _process_db_command(self,db_cmd: Command):
+        """Full DB lifecycle: QUEUED → RUNNING → COMPLETED/ABORTED"""
+        
+        # 2. FAST CACHE for pump loop
+        self.current_command = db_cmd
+
+        is_auto = db_cmd.ctype == CommandType.AUTO_ON
+        
+        try:
+            # 4. PUMP EXECUTION (your existing logic → DB-ready)
+            if self.power_service.is_power_available():
+                with self.pump_context_manager:
+                    start_time = time.time()
+                    db_cmd.status = CommandStatus.RUNNING
+                    db_cmd.in_progress = True
+                    db_cmd.start_time = datetime.utcnow()
+                    self.db_session.commit()
+                    
+                    self._emit_event("PUMP_STARTED", db_cmd)  # Event first!
+                    self.logger.info(f"Pump ON: Command #{db_cmd.id}, mode= {db_cmd.mode}")
+                    
+                    while True:
+                        # CHECK EXIT CONDITIONS
+                        if self._should_exit_pump(db_cmd): #if time complete in manual mode then break
+                            break
+                            
+                        # POWER CHECK
+                        if not self.power_service.is_power_available():
+                            self._handle_power_loss(db_cmd)
+                            return
+                        
+                        # MANUAL STOP CHECK  
+                        if self.manual_stop:
+                            self._handle_manual_stop(db_cmd)
+                            return
+
+                        # TIMER
+                        elapsed = time.time() - start_time
+                        start_time = time.time()            # start time reset                     
+
+                        if not is_auto:
+                            # UPDATE DB remaining_sec
+                            db_cmd.remaining_sec = max(0, db_cmd.remaining_sec - elapsed)
+
+                        db_cmd.duration_sec += elapsed      #this for auto and manual
+                        self.db_session.commit()
+
+                        time.sleep(self.poll_interval)
+            
+            # 5. SUCCESS COMPLETION
+            self._complete_command_success(db_cmd)
+            
+        except Exception as e:
+            # 6. ERROR HANDLING
+            self._complete_command_error(db_cmd, str(e))
+        
+        finally:
+            self.current_command = None
+
+    def _should_exit_pump(self, db_cmd:Command) -> bool:
+        """Timer-only exit (manual_stop handled separately)"""
+        is_auto = db_cmd.ctype == CommandType.AUTO_ON
+        return (not is_auto and db_cmd.remaining_sec <= 0)
+                
+    def _handle_power_loss(self, db_cmd: Command):
+        """Power loss - Consistent dict event"""
+        self._update_db_command(db_cmd, status=CommandStatus.ABORTED, in_progress=False)
+        self._emit_event("PUMP_ABORTED_POWER_LOSS", {
+            "command_id": db_cmd.id,
+            "remaining_min": round(db_cmd.remaining_sec / 60),  # ORM attribute
+            "sender": db_cmd.sender_phone
+        })
+
+    def _handle_manual_stop(self, db_cmd: Command):
+        """Manual stop - Consistent dict event"""
+        self._update_db_command(db_cmd, status=CommandStatus.TERMINATED, in_progress=False)
+        is_auto = db_cmd.ctype == CommandType.AUTO_ON
+        event_type = "PUMP_AUTO_STOPPED" if is_auto else "PUMP_ABORTED_MANUAL_STOP"
+        self._emit_event(event_type, {
+            "command_id": db_cmd.id,
+            "sender": db_cmd.sender_phone,
+            "ctype": db_cmd.ctype.value  # 'MANUAL_ON'
+        })
+        self.reset_manual_stop()
+
+    def _complete_command_success(self, db_cmd: Command):
+        """Success - Consistent dict event"""
+        self._update_db_command(db_cmd, 
+                            status=CommandStatus.COMPLETED, 
+                            in_progress=False,
+                            completed_at=datetime.utcnow())
+        self._emit_event("PUMP_COMPLETED", {
+            "command_id": db_cmd.id,
+            "sender": db_cmd.sender_phone,
+            "total_runtime_min": round(db_cmd.duration_sec / 60)
+        })
+
+    def _complete_command_error(self, db_cmd: Command, error_msg: str):
+        """Error completion state transition"""
+        self._update_db_command(db_cmd, 
+                            status=CommandStatus.FAILED,  # Or ABORTED
+                            in_progress=False,
+                            completed_at=datetime.utcnow())
+        
+        self.logger.error(f"Command #{db_cmd.id} failed: {error_msg}")
+        
+        self._emit_event("PUMP_ERROR", {
+            "command_id": db_cmd.id,
+            "error": error_msg[:100],  # Truncate for SMS
+            "sender": db_cmd.sender_phone
+        })
+
+    def _emit_event(self, event_type: str, details: dict = None):
+        """Unified event emission - dict OR ORM"""
+        if self.event_handler:
+            event_data = details
+            if hasattr(details, 'id'):  # ORM object fallback
+                event_data = {
+                    "command_id": details.id,
+                    "sender": details.sender_phone,
+                    "ctype": details.ctype.value
+                }
+            
+            event = {
+                "type": event_type,
+                "timestamp": time.time(),
+                "data": event_data
+            }
+            self.event_handler(event)
+
+    def _update_db_command(self, db_cmd : Command, **updates):
+        """Atomic DB updates"""
+        for key, value in updates.items():
+            setattr(db_cmd, key, value)
+        self.db_session.commit()
+
+    def _delete_one(self, trigger_cmd: Command):
+        """Kill CURRENT RUNNING pump only"""
+        running_cmd = self.db_session.query(Command).filter(
+            Command.status == CommandStatus.RUNNING,
+            Command.in_progress == True
+        ).first()
+        
+        if running_cmd:
+            self.logger.info(f"DELETE_ONE: Stopping RUNNING #{running_cmd.id}")
+            self.manual_stop = True  # Triggers _handle_manual_stop()
+            return True
+        return False
+
+    def _delete_all(self, trigger_cmd: Command):
+        """1st TERMINATE pending → 2nd _delete_one() running"""
+        
+        # 1. FIRST: TERMINATE ALL QUEUED/ABORTED
+        pending_cmds = self.db_session.query(Command).filter(
+            Command.status.in_([CommandStatus.QUEUED, CommandStatus.ABORTED])
+        ).all()
+        
+        for cmd in pending_cmds:
+            self._update_db_command(cmd, 
+                                status=CommandStatus.TERMINATED,
+                                terminated_by=trigger_cmd.id)
+        
+        deleted_count = len(pending_cmds)
+        
+        # 2. THEN: Reuse _delete_one() for RUNNING
+        running_stopped = self._delete_one(trigger_cmd)
+        
+        self.logger.info(f"DELETE_ALL: TERMINATED {deleted_count} pending, "
+                        f"running_stopped={running_stopped}")
+        
+        # 3. SINGLE EVENT - Complete status
+        self._emit_event("PUMP_CLEARED_ALL", {
+            "deleted_count": deleted_count,
+            "running_stopped": running_stopped,
+            "trigger_id": trigger_cmd.id,
+            "sender": trigger_cmd.sender_phone
+        })
+
+    def _get_queue_position(self, cmd_id: int) -> int:
+        """Position in QUEUED/ABORTED queue"""
+        cmd = self.db_session.query(Command).get(cmd_id)
+        if cmd.status not in [CommandStatus.QUEUED, CommandStatus.ABORTED]:
+            return 0
+        
+        ahead_count = self.db_session.query(Command).filter(
+            Command.status.in_([CommandStatus.QUEUED, CommandStatus.ABORTED]),
+            Command.priority < cmd.priority,
+            or_(Command.priority == cmd.priority, Command.created_at < cmd.created_at)
+        ).count()
+        return ahead_count + 1

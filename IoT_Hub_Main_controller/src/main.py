@@ -7,9 +7,10 @@ from main_controller import MainController
 import threading
 from settings import SENSORS
 from file_manager import log_sensors
-from modules.phase_monitor import LedMonitor, phase_data
+from modules.phase_monitor import LedMonitor
 from modules.lcd_display.lcd_module import LCD
 import time
+from logging_config import logger
 from modules.pump_control import PumpManager, PumpContextManager
 from command_processor import CommandProcessor
 from modules.sim800l.sim import FarmSMSHandler
@@ -21,18 +22,14 @@ pump_context_manager = PumpContextManager(pump_manager)
 led_monitor = LedMonitor(poll_interval=1)
 
 # command_processor instance
-processor = CommandProcessor(
-    pump_context_manager=pump_context_manager,
-    phase_data=phase_data,
-    poll_interval=5,
-)
+processor = CommandProcessor(pump_context_manager=pump_context_manager,)
 # 3. **NEW: Create SMS Handler (instead of global sms_thread)**
 sms_handler = FarmSMSHandler()  
 
 # Create MainController (central brain)
 main_controller = MainController(
     command_processor=processor,
-    phase_data=phase_data,
+    led_monitor = led_monitor,
     sms_handler=sms_handler,
 )
 
@@ -47,10 +44,9 @@ sms_service.start()
 # sim800l = SIM800L()
 time.sleep(2)
 
-lcd = LCD(main_controller=main_controller, logger=logger)          # Lcd thread started
+lcd = LCD(main_controller=main_controller)          # Lcd thread started
 time.sleep(2)
 
-LedMonitor(poll_interval=1)       # led monitoring started at new thread
 time.sleep(5)
 log_sensors(sensors=SENSORS)
 time.sleep(5)

@@ -47,7 +47,8 @@ class SMSService:
                 reply = self.main_controller.handle_incoming_sms(
                     sender=sms_log.phone, 
                     text=sms_log.message, 
-                    sms_log=sms_log
+                    sms_log_id=sms_log.id,
+                    user_id = sms_log.user_id,
                 )
                 
                 # Mark PROCESSED (MainController handles SMS sending)
