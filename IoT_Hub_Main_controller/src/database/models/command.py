@@ -50,5 +50,5 @@ class Command(db.Model):
     
     __table_args__ = (
         db.Index('idx_status_priority', 'status', 'priority'),
-        db.Index('idx_sender_status', 'sender', 'status'),
+        db.Index('idx_sender_status', 'sender_phone', 'status'),
     )

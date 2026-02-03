@@ -2,6 +2,7 @@ import RPi.GPIO as GPIO
 from logging_config import logger
 from app import db
 from database.models.gpio_config import GpioConfig, GpioType
+from database.models.pump import Pump
 GPIO.setwarnings(False)
 GPIO.cleanup()      #FOR PREVIOUS CLEANUP
 
@@ -39,6 +40,34 @@ def seed_gpio_config():
         logger.info(f"✅ Seeded {seeded_count} GPIO configs from config.py!")
     else:
         logger.info("All GPIO pins already seeded")
+
+def seed_pumps_from_gpio():
+    """Create Pump entries for GPIO configs of type PUMP"""
+    pumps_created = 0
+
+    pump_gpios = GpioConfig.query.filter(
+        GpioConfig.device_type == "pump"
+    ).all()
+
+    for gpio in pump_gpios:
+        existing = Pump.query.filter_by(gpio_config_id=gpio.id).first()
+        if existing:
+            continue
+
+        pump = Pump(
+            gpio_config_id=gpio.id,
+            name=gpio.name,          # reuse GPIO name
+            desc=f"Auto-created from GPIO {gpio.gpio_key}"
+        )
+
+        db.session.add(pump)
+        pumps_created += 1
+
+    if pumps_created > 0:
+        db.session.commit()
+        logger.info(f"✅ Auto-created {pumps_created} Pump entries")
+    else:
+        logger.info("All Pump entries already exist")
 
 def setup_gpio(db_session):
     """Setup GPIO pins FROM DB ONLY (static + web-added)"""

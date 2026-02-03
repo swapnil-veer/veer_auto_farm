@@ -1,6 +1,9 @@
+from app import create_app, db
 import config
 config.cleanup_gpio()
-config.setup_gpio()
+config.seed_gpio_config()
+config.seed_pumps_from_gpio()
+config.setup_gpio(db.sesion)
 
 from main_controller import MainController
 
@@ -17,7 +20,8 @@ from modules.sim800l.sim import FarmSMSHandler
 from modules.sim800l.sms_service import SMSService
 
 #create pump manager instance
-pump_manager = PumpManager()
+pump_manager = PumpManager(db_session=db.session)
+
 pump_context_manager = PumpContextManager(pump_manager)
 led_monitor = LedMonitor(poll_interval=1)
 
@@ -61,5 +65,11 @@ except KeyboardInterrupt:
     config.cleanup_gpio()
     logger.info("Main loop interrupted - cleanup already registered")
 
+# TODO: Create superuser
+# TODO: led moniter db integration
+# TODO: make lcd_display as plugin
+# TODO: this system should work without RPi module, so we can test code without Pi
+# TODO: add testcases 
+# TODO: create multi pump logic
 
 
