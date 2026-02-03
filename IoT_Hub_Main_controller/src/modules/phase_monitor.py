@@ -4,6 +4,9 @@ import time
 import threading
 from datetime import datetime
 from logging_config import logger
+from app import db
+from database.models.phase_log import PhaseLog
+from datetime import datetime
 
 phase_data = {
     'timestamp':datetime.now().strftime("%Y-%m-%d %H:%M:%S"),    
@@ -25,7 +28,16 @@ class LedMonitor:
         self.yellow_pin = config.GPIO_PINS["phase_monitor_yellow"]["pin"]
         self.red_pin = config.GPIO_PINS["phase_monitor_red"]["pin"]
 
-        self._poll_interval = poll_interval
+        self.poll_interval = poll_interval
+
+        self._state = {
+            "green_led": False,
+            "yellow_led": False,
+            "red_led": False,
+            "timestamp": datetime.utcnow()
+        }
+
+        self._lock = threading.Lock()
 
         # Start background thread
         self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -34,60 +46,91 @@ class LedMonitor:
 
     def is_power_available(self) -> bool:
         """CommandProcessor साठी: Green LED ON?"""
-        global phase_data
-        return phase_data['green_led'] == 1
+        with self._lock:
+            return self._state["green_led"]
     
     def get_status(self) -> str:
         """MainController साठी: power_ok/wait/fault"""
-        global phase_data
-        if phase_data['green_led']: return 'power_ok'
-        elif phase_data['yellow_led']: return 'power_wait'
-        elif phase_data['red_led']: return 'power_fault'
-        else: return 'power_fault'
+        with self._lock:
+            if self._state["green_led"]:
+                return "power_ok"
+            elif self._state["yellow_led"]:
+                return "power_wait"
+            elif self._state["red_led"]:
+                return "power_fault"
+            return "power_fault"
     
-    def get_phase_data(self) -> dict:
-        """Full phase data (legacy + future)"""
-        global phase_data
-        return phase_data.copy()
-    
+    def get_current_state(self) -> dict:
+        """Read-only snapshot"""
+        with self._lock:
+            return self._state.copy()
+        
     def _monitor_loop(self):
-        """Background loop to update LED states."""
-        global phase_data
-        while True:
-            updated = False
+            """Poll GPIO pins and react on changes"""
+            logger.info("LedMonitor polling loop started")
 
-            green_state = GPIO.input(self.green_pin)
-            yellow_state = GPIO.input(self.yellow_pin)
-            red_state = GPIO.input(self.red_pin)
+            while True:
+                try:
+                    green = bool(GPIO.input(self.green_pin))
+                    yellow = bool(GPIO.input(self.yellow_pin))
+                    red = bool(GPIO.input(self.red_pin))
 
-            if phase_data['green_led'] != green_state:
-                phase_data['green_led'] = green_state
-                logger.info(f"Green LED changed: {green_state}")
-                updated = True
+                    with self._lock:
+                        changed = (
+                            green != self._state["green_led"] or
+                            yellow != self._state["yellow_led"] or
+                            red != self._state["red_led"]
+                        )
 
-            if phase_data['yellow_led'] != yellow_state:
-                phase_data['yellow_led'] = yellow_state
-                logger.info(f"Yellow LED changed: {yellow_state}")
-                updated = True
+                    if changed:
+                        self._handle_state_change(green, yellow, red)
 
-            if phase_data['red_led'] != red_state:
-                phase_data['red_led'] = red_state
-                logger.info(f"Red LED changed: {red_state}")
-                updated = True
+                except Exception as e:
+                    logger.exception(f"LedMonitor error: {e}")
 
-            if not updated:
-                # No change, skip logging
-                pass
+                time.sleep(self.poll_interval)
 
-            time.sleep(self._poll_interval)
+    def _handle_state_change(self, green: bool, yellow: bool, red: bool):
+            """Update in-memory state + persist DB"""
+            now = datetime.utcnow()
 
+            with self._lock:
+                self._state.update({
+                    "green_led": green,
+                    "yellow_led": yellow,
+                    "red_led": red,
+                    "timestamp": now
+                })
 
-# Example usage
-if __name__ == "__main__":
-    monitor = LedMonitor(poll_interval=1)
-    try:
-        while True:
-            print(phase_data)  # Directly access global dict
-            time.sleep(2)
-    except KeyboardInterrupt:
-        GPIO.cleanup()
+            logger.info(
+                f"Phase change detected | Green={green} Yellow={yellow} Red={red}"
+            )
+
+            self._persist_phase_log(green, yellow, red, now)
+
+    def _persist_phase_log(
+            self,
+            green: bool,
+            yellow: bool,
+            red: bool,
+            timestamp: datetime
+        ):
+            """
+            Persist phase log.
+            Uses independent DB session (thread-safe).
+            """
+            try:
+                phase_log = PhaseLog(
+                    green_led=green,
+                    yellow_led=yellow,
+                    red_led=red,
+                    timestamp=timestamp
+                )
+
+                db.session.add(phase_log)
+                db.session.commit()
+
+            except Exception as e:
+                db.session.rollback()
+                logger.exception(f"Failed to persist PhaseLog: {e}")
+
