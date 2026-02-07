@@ -1,4 +1,6 @@
 from app import create_app, db
+app = create_app()
+
 import config
 config.cleanup_gpio()
 config.seed_gpio_config()
