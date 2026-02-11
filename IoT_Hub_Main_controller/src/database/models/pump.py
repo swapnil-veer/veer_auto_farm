@@ -12,8 +12,9 @@ class Pump(db.Model):
     desc = db.Column(db.String(100), nullable=True)
     
     # Relationships
+    gpio_config_id = db.Column(db.Integer, db.ForeignKey('gpio_config.id'))
     gpio_config = db.relationship('GpioConfig', backref='pumps')
-    pump_runs = db.relationship('PumpRun', backref='pump', lazy=True)
+    # pump_runs = db.relationship('PumpRun', backref='pump', lazy=True)
     
     def __repr__(self):
         return f'<Pump {self.name}>'
