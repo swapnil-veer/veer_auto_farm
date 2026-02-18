@@ -18,16 +18,16 @@ phase_data = {
 # Global dict that can be imported in main.py
 
 class LedMonitor:
-    def __init__(self, poll_interval=1):
+    def __init__(self, app = None, poll_interval=1):
         """
         Monitor LED states in the background.
         Updates global phase_data dict.
         :param poll_interval: seconds between checks
         """
-        self.green_pin = config.GPIO_PINS["phase_monitor_green"]["pin"]
-        self.yellow_pin = config.GPIO_PINS["phase_monitor_yellow"]["pin"]
-        self.red_pin = config.GPIO_PINS["phase_monitor_red"]["pin"]
-
+        self.green_pin = config.GPIO_PINS["phase_monitor_green"]["gpio_pin"]
+        self.yellow_pin = config.GPIO_PINS["phase_monitor_yellow"]["gpio_pin"]
+        self.red_pin = config.GPIO_PINS["phase_monitor_red"]["gpio_pin"]
+        self.app = app
         self.poll_interval = poll_interval
 
         self._state = {
@@ -117,20 +117,21 @@ class LedMonitor:
         ):
             """
             Persist phase log.
-            Uses independent DB session (thread-safe).
+            Uses independent app context (thread-safe).
             """
-            try:
-                phase_log = PhaseLog(
-                    green_led=green,
-                    yellow_led=yellow,
-                    red_led=red,
-                    timestamp=timestamp
-                )
+            with self.app.app_context():
+                try:
+                    phase_log = PhaseLog(
+                        green_led=green,
+                        yellow_led=yellow,
+                        red_led=red,
+                        timestamp=timestamp
+                    )
 
-                db.session.add(phase_log)
-                db.session.commit()
+                    db.session.add(phase_log)
+                    db.session.commit()
 
-            except Exception as e:
-                db.session.rollback()
-                logger.exception(f"Failed to persist PhaseLog: {e}")
+                except Exception as e:
+                    db.session.rollback()
+                    logger.exception(f"Failed to persist PhaseLog: {e}")
 

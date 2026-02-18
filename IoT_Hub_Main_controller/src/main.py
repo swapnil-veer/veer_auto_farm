@@ -1,11 +1,15 @@
 from app import create_app, db
 app = create_app()
-
 import config
-config.cleanup_gpio()
-config.seed_gpio_config()
-config.seed_pumps_from_gpio()
-config.setup_gpio(db.sesion)
+
+with app.app_context():
+    db.create_all()
+config.seed_gpio_config(app)
+config.seed_pumps_from_gpio(app)
+config.setup_gpio(app)
+
+# config.cleanup_gpio()
+
 
 from main_controller import MainController
 
@@ -22,15 +26,15 @@ from modules.sim800l.sim import FarmSMSHandler
 from modules.sim800l.sms_service import SMSService
 
 #create pump manager instance
-pump_manager = PumpManager(db_session=db.session)
+pump_manager = PumpManager(app = app)
 
-pump_context_manager = PumpContextManager(pump_manager)
-led_monitor = LedMonitor(poll_interval=1)
+pump_context_manager = PumpContextManager(relay_manager = pump_manager)
+led_monitor = LedMonitor(app = app, poll_interval=1)
 
 # command_processor instance
-processor = CommandProcessor(pump_context_manager=pump_context_manager,)
+processor = CommandProcessor(pump_context_manager=pump_context_manager, app = app)
 # 3. **NEW: Create SMS Handler (instead of global sms_thread)**
-sms_handler = FarmSMSHandler()  
+sms_handler = FarmSMSHandler(app = app)  
 
 # Create MainController (central brain)
 main_controller = MainController(
@@ -43,7 +47,7 @@ main_controller = MainController(
 processor.event_handler = main_controller.handle_event
 processor.power_service = main_controller.power_service
 
-sms_service = SMSService(main_controller, sms_handler)
+sms_service = SMSService(main_controller, sms_handler, app = app)
 sms_service.start()
 
 
@@ -74,4 +78,9 @@ except KeyboardInterrupt:
 # TODO: add testcases 
 # TODO: create multi pump logic
 
-
+# from database.models import User
+# user = User (phone = "+917038835527", name = "Swapnil", email = "veerswapnil00@gmail.com", is_owner = True, is_superuser = True)
+# with app.app_context():
+#     db.session.add(user)
+#     db.session.commit()
+# print(user)

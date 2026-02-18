@@ -1,5 +1,5 @@
 import os
-from database import db
+from app import db
 from database.models.sms_log import SmsLog, SmsDirection, SmsStatus
 from database.models.user import User
 from datetime import datetime
@@ -25,7 +25,7 @@ class FarmSMSHandler:
         "secondary": ph_no_2
     }
 
-    def __init__(self,poll_interval = 2):
+    def __init__(self,poll_interval = 5, app = None):
         # Init GSM with retries
         # self.sm = gammu.StateMachine()
         # self.sm.ReadConfig()
@@ -33,11 +33,13 @@ class FarmSMSHandler:
         self.signal = 0
         self._lock = threading.Lock()
         self.poll_interval = poll_interval
+        self.logger = logger
+        self.logger.info("SMS background thread started")
         self._init_sm()  # Initial
         self._thread = threading.Thread(target=self._sms_loop, daemon=True)
         self._thread.start()
-        self.logger = logger
-        self.logger.info("SMS background thread started")
+        self.app = app
+
 
     def _init_sm(self):
         self.sm = gammu.StateMachine()
@@ -48,7 +50,7 @@ class FarmSMSHandler:
             self.logger.info(f"Sim Connected")
 
         except Exception as e:
-            self.logger.error(f"Init failed: {e}")
+            logger.error(f"Init failed: {e}")
             self._update_status(False)
 
 
@@ -68,7 +70,7 @@ class FarmSMSHandler:
         if self.connected:
             self.logger.info("SIM connected")
         else:
-            self.logger.error("SIM not connected")
+            logger.error("SIM not connected")
 
     def get_sim_status(self):
         return self.connected  # Fast var check; no blocking call
@@ -94,46 +96,58 @@ class FarmSMSHandler:
     def send_sms(self, number, text, related_sms_id=None, user_id=None):
         """Send SMS with error handling"""    
         # TODO 1: Create OUTGOING SmsLog FIRST
-        outgoing = SmsLog(
-            direction=SmsDirection.OUTGOING,
-            phone=number,
-            message=text,
-            status=SmsStatus.SENDING,
-            related_sms_id=related_sms_id,
-            user_id=user_id
-        )
-        db.session.add(outgoing)
-        db.session.commit()
-        outgoing_id = outgoing.id
+        # outgoing = SmsLog(
+        #     direction=SmsDirection.OUTGOING,
+        #     phone=number,
+        #     message=text,
+        #     status=SmsStatus.SENDING,
+        #     related_sms_id=related_sms_id,
+        #     user_id=user_id
+        # )
+        # with self.app.app_context():
+        #     db.session.add(outgoing)
+        #     db.session.commit()
+        #     outgoing_id = outgoing.id
         def _worker():
             message = {
                 "Text": text,
-                "SMSC": {"Location": 1},
+                "SMSC": {"Location": 1, "Number": "+919822078000" },
                 "Number": number,
             }
-            try:
-                self.sm.SendSMS(message)
-                #TODO 2: Update SENT status
-                outgoing.status = SmsStatus.SENT
-                outgoing.sent_at = datetime.utcnow()
-                db.session.commit()
-                self.logger.info(f"SMS sent to {number}, log_id={outgoing_id}")
-                # self.logger.info(f"msg sent to {number} text : {text}")
-            except gammu.ERR_TIMEOUT:
-                self.connected = False
-                outgoing.status = SmsStatus.FAILED
-                outgoing.error_info = "Timeout - SIM disconnected"
-                db.session.commit()
-            except Exception as e:
-                # TODO 3: Update FAILED status
-                outgoing.status = SmsStatus.FAILED
-                outgoing.error = str(e)
-                db.session.commit()
-                self.logger.error(f"SMS failed to {number}: {e}, log_id={outgoing_id}")
+
+            with self.app.app_context():
+                try:
+                    self.sm.SendSMS(message)
+                    outgoing = SmsLog(
+                        direction=SmsDirection.OUTGOING,
+                        phone=number,
+                        message=text,
+                        status=SmsStatus.SENT,
+                        related_sms_id=related_sms_id,
+                        user_id=user_id,
+                        created_at = datetime.utcnow()
+                    )
+                    # outgoing.status = SmsStatus.SENT
+                    # outgoing.sent_at = datetime.utcnow()
+                    db.session.add(outgoing)
+                    db.session.commit()
+                    
+                    # self.logger.info(f"SMS sent to {number}, log_id={outgoing.id}")
+                    self.logger.info(f"msg sent to {number} text : {text}")
+                except gammu.ERR_TIMEOUT:
+                    self.connected = False
+                    outgoing.status = SmsStatus.FAILED
+                    outgoing.error_info = "Timeout - SIM disconnected"
+                    db.session.commit()
+                except Exception as e:
+                    outgoing.status = SmsStatus.FAILED
+                    outgoing.error = str(e)
+                    db.session.commit()
+                # self.logger.error(f"SMS failed to {number}: {e}, log_id={outgoing_id}")
         # Launch worker thread
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
-        return outgoing_id
+        # return outgoing_id
 
     def check_inbox(self):
         """Check inbox and process commands"""
@@ -167,24 +181,28 @@ class FarmSMSHandler:
                     continue
                 self.logger.info(f"sender: {sender}, msg: {text}")
                 # SmsLog INSERT (status='received')
-                sms_log = SmsLog(direction=SmsDirection.INCOMING, phone=sender, message=text, status=SmsStatus.RECEIVED)
-                db.session.add(sms_log)
-                db.session.commit()
+                with self.app.app_context():
+                    sms_log = SmsLog(direction=SmsDirection.INCOMING, phone=sender, message=text, status=SmsStatus.RECEIVED)
+                    db.session.add(sms_log)
+                    db.session.commit()
 
-                #User table authorization (NEW!)
-                user = User.query.filter_by(phone=sender, is_active=True).first()
-                if user:
-                    sms_log.user_id = user.id
-                    sms_log.status = SmsStatus.AUTHORIZED
-                    sms_log.is_authorized = True
-                else:
-                    sms_log.status = SmsStatus.UNAUTHORIZED
-                    self.logger.info(f"Unauthorized: {sender}")
-                db.session.commit()
+                    #User table authorization (NEW!)
+                    user = User.query.filter_by(phone=sender, is_active=True).first()
+
+                    if user:
+                        sms_log.user_id = user.id
+                        sms_log.status = SmsStatus.AUTHORIZED
+                        sms_log.is_authorized = True
+                    else:
+                        sms_log.status = SmsStatus.UNAUTHORIZED
+                        self.logger.info(f"Unauthorized: {sender}")
+
+                    db.session.commit()
                 self.sm.DeleteSMS(m["Folder"], m["Location"])
+                time.sleep(self.poll_interval)
         except gammu.ERR_TIMEOUT:
             self.connected = False
-        except gammu.ERR_EMPTYSMSLOCATION:
+        except gammu.ERR_EMPTY:
             pass
         except Exception as e:
             self.logger.error(f"SMS loop error: {e}")

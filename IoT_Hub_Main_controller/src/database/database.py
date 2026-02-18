@@ -1,6 +1,5 @@
 # farm_controller/database/database.py - FLASK-SQLALCHEMY
 from flask_sqlalchemy import SQLAlchemy
-
 db = SQLAlchemy()
 
 def init_db(app):

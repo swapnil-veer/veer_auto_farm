@@ -60,13 +60,14 @@ class MainController:
                 min = DEFAULT_DURATION
             # cmd = self._create_command('MANUAL_ON', sender, min)
             try :
-                self.command_processor.handle(ctype = CommandType.MANUAL_ON, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
+                self.command_processor.handle(ctype = CommandType.MANUAL_ON, duration_minutes = min, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
             except ValueError as err_msg:
                 return err_msg
-            return f"Request accepted: Pump ON for {min} min."
+            return None
 
         else:
             return self._handle_invalid(sender=sender)
+
         
     def get_system_status(self) -> dict:
         """
@@ -74,21 +75,20 @@ class MainController:
         Uses phase_data, command_processor, sms_thread, etc.
         Returns a single, stable structure for all UIs.
         """
-        cmd = self.command_processor.current_command
-        mode = cmd["mode"] if cmd else None
-
-        if mode == "manual":
-            manual_remaining_min = round(cmd["remaining_sec"] / 60)
-        else:
-            manual_remaining_min = None
-
+        cmd_dict = self.command_processor.get_command(self.command_processor.cmd_id)  # or current cmd_id
+        
+        mode = cmd_dict.get('mode') or 'idle'
+        manual_remaining_min = None
+        if mode == 'manual':
+            manual_remaining_min = round(cmd_dict.get('remaining_sec', 0) / 60)
+        
         status = {
-            "power": self.power_service.is_power_available(),
-            "mode": mode,                                                    # 'manual' / 'auto' / None
-            "pump_on": self.command_processor.pump_context_manager.relay_manager.get_pump_state(),  # from pump_manager
-            "manual_remaining_min": manual_remaining_min,  # None in auto/idle
-            "sim_ok": self.sms_handler.get_sim_status(),
-            "signal_strength": self.sms_handler.get_signal_strength() or 0,
+            'power': self.power_service.is_power_available(),
+            'mode': mode,
+            'pump_on': self.command_processor.pump_context_manager.relay_manager.get_pump_state(),  # pump_manager
+            'manual_remaining_min': manual_remaining_min,
+            'sim_ok': self.sms_handler.get_sim_status(),
+            'signal_strength': self.sms_handler.get_signal_strength() or 0,
         }
         return status
         
@@ -265,12 +265,10 @@ class EventHandler:
         ctype = data.get("ctype", "unknown")
         duration = data.get("duration_min")
         position = data.get("position", "?")
-        
         if duration:
-            text = f"✅ #{data['command_id']} queued ({ctype}, {duration}min, pos {position})"
+            text = f"Request accepted: #{data['command_id']} queued ({ctype}, {duration}min)"
         else:
-            text = f"✅ #{data['command_id']} queued ({ctype}, pos {position})"
-        
+            text = f"Request accepted: #{data['command_id']} queued ({ctype})"
         if sender:
             self.sms_handler.send_sms(sender, text)
         self.logger.info(f"COMMAND_QUEUED: {data}")
@@ -281,7 +279,8 @@ class PowerStatusService:
         self.led_monitor = led_monitor
     
     def is_power_available(self) -> bool:
-        return self.led_monitor.is_power_available()
+        # return self.led_monitor.is_power_available()
+        return True
     
     def get_status(self) -> str:
         return self.led_monitor.get_status()

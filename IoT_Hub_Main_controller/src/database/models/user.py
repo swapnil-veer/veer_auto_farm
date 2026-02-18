@@ -3,6 +3,8 @@ from app import db
 from datetime import datetime
 
 class User(db.Model):
+    __tablename__ = 'user'
+
     id = db.Column(db.Integer, primary_key=True)
     phone = db.Column(db.String(20), unique=True, nullable=False, index=True)
     name = db.Column(db.String(100))
@@ -32,3 +34,6 @@ class User(db.Model):
     def get_only(cls, phone):
         """Safe lookup - NO create"""
         return cls.query.filter_by(phone=phone, is_active=True).first()
+
+    def __repr__(self):
+        return f"<User {self.user.name}"

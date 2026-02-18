@@ -1,4 +1,4 @@
-from database.database import db
+from app import db
 
 
 class PhaseLog(db.Model):

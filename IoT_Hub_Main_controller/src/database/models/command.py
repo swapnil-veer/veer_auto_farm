@@ -20,6 +20,7 @@ class CommandStatus(Enum):
     COMPLETED = 'completed'
     ABORTED = 'aborted'
     TERMINATED = 'terminated'
+    FAILED = 'failed'
 
 class Command(db.Model):
     __tablename__ = 'command'
@@ -33,8 +34,8 @@ class Command(db.Model):
     
     # Numeric fields
     priority = db.Column(db.Integer, nullable=False)
-    duration_sec = db.Column(db.Integer, nullable=True)
-    remaining_sec = db.Column(db.Integer, nullable=True)
+    duration_sec = db.Column(db.Float, nullable=True)
+    remaining_sec = db.Column(db.Float, nullable=True)
     
     # Boolean + Timestamps
     in_progress = db.Column(db.Boolean, default=False)

@@ -4,6 +4,7 @@ from config import GPIO_PINS, set_high, set_low
 from database.models.pump import Pump, PumpRun
 from datetime import datetime
 from logging_config import logger
+from app import db
 
 
 class PumpContextManager:
@@ -11,18 +12,23 @@ class PumpContextManager:
     Context manager for safely turning the relay on and off.
     Ensures relay is turned off on exit, even if exceptions occur.
     """
-    def __init__(self, relay_manager):
+    def __init__(self, relay_manager, cmd_id = None):
         self.relay_manager = relay_manager
+        self.cmd_id = cmd_id
         self.is_on = False
+        self.pump_run_id = None
+
+    def set_cmd_id(self, cmd_id):  # ✅ Setter method
+        self.cmd_id = cmd_id
 
     def __enter__(self):
-        self.relay_manager.relay_on()
+        self.pump_run_id = self.relay_manager.relay_on(self.cmd_id)
         self.is_on = True
-        return self
+        return self.pump_run_id
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.is_on:
-            self.relay_manager.relay_off()
+            self.relay_manager.relay_off(self.pump_run_id)
         # Re-raise exception if any
         return False
 
@@ -55,62 +61,102 @@ class PumpContextManager:
 #         return self.state
 
 class PumpManager:
-    def __init__(self, db_session, pump: Pump = None):
-        self.db = db_session
+    def __init__(self, app = None, pump_id : int = None):
+        self.app = app
         self.logger = logger
-
-        # Resolve default pump if none provided
-        if pump is None:
-            pump = (self.db.query(Pump)         #default pump
-                .order_by(Pump.id)
-                .first()
-            )
-            
-            if not pump:
-                raise RuntimeError("No pump configured in system")
-
-            self.logger.info(f"Default pump selected: {pump.name}")
-
-        self.pump = pump
+        self._resolve_pump(pump_id)
         self.current_run = None
         self.state = False
 
+        self._pump_id = None
+        self._pump_name = None
+        self._pin = None
+        self.state = False
+        self.current_run_id = None
+        
+        self._resolve_pump(pump_id)
+        logger.info(f"PumpManager initialized: ID={self._pump_id}")
+    def _resolve_pump(self, pump_id : int = None):
+        """Resolve pump safely with app context."""
+        with self.app.app_context():
+            if pump_id:
+                self._pump = Pump.query.get(pump_id)
+            else:
+                self._pump = Pump.query.first()
+            
+            if not self._pump:
+                raise RuntimeError("No enabled pump configured!")
+            
+            self._pump_id = self._pump.id
+            self._pump_name = self._pump.name
+            self._pin = self._pump.gpio_config.gpio_pin
+            logger.info(f"Pump resolved: {self._pump_name} → GPIO {self._pin}")
+
     def relay_on(self, command_id: int):
+        """Turn pump ON and log PumpRun."""
         if self.state:
-            self.logger.warning(f"Pump already ON: {self.pump.name}")
-            return
+            logger.warning(f"Pump {self._pump_id} already ON")
+            return self.current_run.id if self.current_run else None
 
-        pin = self.pump.gpio_config.pin_number
+        try:
+            set_high(self._pin)
+            self.state = True
+            logger.info(f"Pump ON: {self._pump.name} (GPIO {self._pin})")
 
-        self.logger.info(f"Pump ON: {self.pump.name} (GPIO {pin})")
-        set_high(pin)
-        self.state = True
+            with self.app.app_context():
+                pump_run = PumpRun(
+                    pump_id=self._pump_id,
+                    on_command_id=command_id,
+                    on_time=datetime.utcnow()
+                )
+                db.session.add(pump_run)
+                db.session.commit()
+                self.current_run_id = pump_run.id
+                return self.current_run_id
+                
+        except Exception as e:
+            logger.error(f"Pump ON failed: {e}")
+            set_low(self._pin)  # Safety off
+            self.state = False
+            raise
 
-        self.current_run = PumpRun(
-            pump_id=self.pump.id,
-            on_command_id=command_id,
-            on_time=datetime.utcnow()
-        )
-        self.db.add(self.current_run)
-        self.db.commit()
-
-    def relay_off(self, command_id: int = None):
+    def relay_off(self, pump_run_id : int):
+        """Turn pump OFF and update run record."""
         if not self.state:
             return
 
-        pin = self.pump.gpio_config.pin_number
+        run_id = pump_run_id or (self.current_run_id if self.current_run_id else None)
+        if not run_id:
+            logger.warning("No pump_run_id provided")
+            return
 
-        self.logger.info(f"Pump OFF: {self.pump.name} (GPIO {pin})")
-        set_low(pin)
-        self.state = False
+        try:
+            set_low(self._pin)
+            self.state = False
+            logger.info(f"Pump OFF: {self._pump.name}")
 
-        if self.current_run:
-            self.current_run.off_time = datetime.utcnow()
-            self.current_run.off_command_id = command_id
-            self.current_run.calculate_duration()
-            self.db.commit()
-            self.current_run = None
+            with self.app.app_context():
+                pump_run = PumpRun.query.get(run_id)
+                if pump_run:
+                    pump_run.off_time = datetime.utcnow()
+                    pump_run.calculate_duration()
+                    db.session.commit()
+                self.current_run_id = None
+                
+        except Exception as e:
+            logger.error(f"Pump OFF failed: {e}")
+            raise
 
+    def get_status(self) -> dict:
+        """Get current pump status."""
+        return {
+            'pump_id': self._pump_id,
+            'pump_name': self._pump_name,
+            'pin': self._pin,
+            'state': self.state,
+            'current_run_id': self.current_run_id 
+        }
+    
     def set_power(self, state: bool):
         """Set power state."""
         self.power = state
