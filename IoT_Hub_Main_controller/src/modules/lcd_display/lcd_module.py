@@ -5,7 +5,7 @@ from settings import get_ip_address, get_cpu_temp
 import threading
 
 class LCD:
-    def __init__(self, main_controller, i2c_address=0x27, poll_interval=3     ):
+    def __init__(self, main_controller, i2c_address=0x27, poll_interval=5):
         """
         Initialize the LCD with I2C address (default: 0x27)
         """

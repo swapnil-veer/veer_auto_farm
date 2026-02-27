@@ -92,123 +92,181 @@ class FarmSMSHandler:
 
     def get_signal_strength(self):
         return self.signal
-
-    def send_sms(self, number, text, related_sms_id=None, user_id=None):
-        """Send SMS with error handling"""    
-        # TODO 1: Create OUTGOING SmsLog FIRST
-        # outgoing = SmsLog(
-        #     direction=SmsDirection.OUTGOING,
-        #     phone=number,
-        #     message=text,
-        #     status=SmsStatus.SENDING,
-        #     related_sms_id=related_sms_id,
-        #     user_id=user_id
-        # )
-        # with self.app.app_context():
-        #     db.session.add(outgoing)
-        #     db.session.commit()
-        #     outgoing_id = outgoing.id
-        def _worker():
-            message = {
-                "Text": text,
-                "SMSC": {"Location": 1, "Number": "+919822078000" },
-                "Number": number,
-            }
-
-            with self.app.app_context():
-                try:
-                    self.sm.SendSMS(message)
-                    outgoing = SmsLog(
-                        direction=SmsDirection.OUTGOING,
-                        phone=number,
-                        message=text,
-                        status=SmsStatus.SENT,
-                        related_sms_id=related_sms_id,
-                        user_id=user_id,
-                        created_at = datetime.utcnow()
-                    )
-                    # outgoing.status = SmsStatus.SENT
-                    # outgoing.sent_at = datetime.utcnow()
-                    db.session.add(outgoing)
-                    db.session.commit()
-                    
-                    # self.logger.info(f"SMS sent to {number}, log_id={outgoing.id}")
-                    self.logger.info(f"msg sent to {number} text : {text}")
-                except gammu.ERR_TIMEOUT:
-                    self.connected = False
-                    outgoing.status = SmsStatus.FAILED
-                    outgoing.error_info = "Timeout - SIM disconnected"
-                    db.session.commit()
-                except Exception as e:
-                    outgoing.status = SmsStatus.FAILED
-                    outgoing.error = str(e)
-                    db.session.commit()
-                # self.logger.error(f"SMS failed to {number}: {e}, log_id={outgoing_id}")
-        # Launch worker thread
-        thread = threading.Thread(target=_worker, daemon=True)
-        thread.start()
-        # return outgoing_id
-
-    def check_inbox(self):
-        """Check inbox and process commands"""
-        self._check_connection()  # Periodic check/re-init
-        if not self.connected:
-            time.sleep(5)
-            return None
-
-        try:
-            self.signal = self._signal_strength()
-            # self.sm.Init()  # Init here if not in __init__
-            status = self.sm.GetSMSStatus()
-            remain = status["SIMUsed"] + status["PhoneUsed"] + status["TemplatesUsed"]
-            sms = []
-            start = True
-            while remain > 0:
-                if start:
-                    cursms = self.sm.GetNextSMS(Start=True, Folder=0)
-                    start = False
-                else:
-                    cursms = self.sm.GetNextSMS(Location=cursms[0]["Location"], Folder=0)
-                remain -= len(cursms)
-                sms.append(cursms)
-            data = gammu.LinkSMS(sms)  # Combine multi-part
-            for x in data:
-                m = x[0]
-                sender = m["Number"]
-                text = m["Text"].strip()
-                state = m["State"]
-                if state != "UnRead":
-                    continue
-                self.logger.info(f"sender: {sender}, msg: {text}")
-                # SmsLog INSERT (status='received')
-                with self.app.app_context():
-                    sms_log = SmsLog(direction=SmsDirection.INCOMING, phone=sender, message=text, status=SmsStatus.RECEIVED)
-                    db.session.add(sms_log)
-                    db.session.commit()
-
-                    #User table authorization (NEW!)
-                    user = User.query.filter_by(phone=sender, is_active=True).first()
-
-                    if user:
-                        sms_log.user_id = user.id
-                        sms_log.status = SmsStatus.AUTHORIZED
-                        sms_log.is_authorized = True
-                    else:
-                        sms_log.status = SmsStatus.UNAUTHORIZED
-                        self.logger.info(f"Unauthorized: {sender}")
-
-                    db.session.commit()
-                self.sm.DeleteSMS(m["Folder"], m["Location"])
-                time.sleep(self.poll_interval)
-        except gammu.ERR_TIMEOUT:
-            self.connected = False
-        except gammu.ERR_EMPTY:
-            pass
-        except Exception as e:
-            self.logger.error(f"SMS loop error: {e}")
         
     def _sms_loop(self):
         while True:
             self.check_inbox()
             time.sleep(self.poll_interval)  # Poll interval
+
+    def check_inbox(self):
+        if not self._ensure_sim_connected():
+            return None
+        self.signal = self._signal_strength()
+        sms_list = self._read_sms_folder(0)
+        for sms_batch in sms_list:
+            try:
+                sms = sms_batch[0]
+                phone, text, folder, location = self._process_single_sms(sms)
+
+                sms_log_id = self._log_incoming_sms(phone, text)
+                self._authorize_sms_log(sms_log_id)
+                self._delete_sms(folder, location)
+                
+            except Exception as e:
+                self.logger.error(f"SMS processing failed: {e}") 
+
+# Core Helpers
+    def _ensure_sim_connected(self) -> bool:
+        """Check connection + re-init if needed."""
+        self._check_connection()
+        if not self.connected:
+            self._init_sm()
+        return self.connected
     
+    def _is_authorized_user(self, phone: str) -> bool:
+        with self.app.app_context():
+            user = User.query.filter_by(phone=phone, is_active=True).first()
+            user_id = user.id
+        if user:
+            self.logger.info(f"User {user_id} authorized.")
+            return True
+
+    def _get_user(self, phone: str) -> int | None:
+        """Get active user by phone."""
+        with self.app.app_context():
+            user = User.query.filter_by(phone=phone, is_active=True).first()
+            return user.id
+        
+    def _read_sms_folder(self, folder: int = 0) -> list[dict]:
+        """Read entire SMS folder + LinkSMS multi-part."""
+        if not self.connected:
+            return []
+        
+        sms = []
+        try:
+            status = self.sm.GetSMSStatus()
+            remain = status["SIMUsed"] + status["PhoneUsed"] + status["TemplatesUsed"]
+            start = True
+            
+            while remain > 0:
+                if start:
+                    cursms = self.sm.GetNextSMS(Start=True, Folder=folder)
+                    start = False
+                else:
+                    cursms = self.sm.GetNextSMS(Location=cursms[0]["Location"], Folder=folder)
+                remain -= len(cursms)
+                sms.append(cursms)
+            
+            return gammu.LinkSMS(sms)
+        except Exception:
+            return []
+
+    def _process_single_sms(self, sms: dict) -> tuple[str, str, int, int]:
+        """Extract phone/text/folder/location from single SMS."""
+        m = sms 
+        return (
+            m["Number"], 
+            m["Text"].strip(), 
+            m["Folder"], 
+            m["Location"]
+        )
+
+    def _log_incoming_sms(self, phone: str, text: str) -> int:
+        """Create RECEIVED SmsLog entry."""
+        self.logger.info(f"sender: {phone}, msg: {text}")
+        with self.app.app_context():
+            sms_log = SmsLog(
+                direction=SmsDirection.INCOMING,
+                phone=phone,
+                message=text,
+                status=SmsStatus.RECEIVED
+            )
+            db.session.add(sms_log)
+            db.session.commit()
+            return sms_log.id
+
+    def _authorize_sms_log(self, sms_log_id: int) -> None:
+        """Set AUTHORIZED/UNAUTHORIZED status on SmsLog."""
+        with self.app.app_context():
+            sms_log = SmsLog.query.get(sms_log_id)
+            if self._is_authorized_user(sms_log.phone):
+                user_id = self._get_user(sms_log.phone)
+                sms_log.user_id = user_id
+                sms_log.status = SmsStatus.AUTHORIZED
+                sms_log.is_authorized = True
+            else:
+                sms_log.status = SmsStatus.UNAUTHORIZED
+            db.session.commit()
+
+    def _delete_sms(self, folder: int, location: int) -> bool:
+        """Safely delete single SMS."""
+        try:
+            self.sm.DeleteSMS(folder, location)
+            return True
+        except Exception as e:
+            self.logger.error(f"Delete failed {folder}:{location}: {e}")
+            return False
+
+# ---------------------------------------------------------------
+#   for sending
+    def _log_sms_sent(self, phone: str, text: str, related_sms_id: int = None, user_id: int = None) -> SmsLog:
+        """Create SENT SmsLog entry."""
+        with self.app.app_context():
+            if self._is_authorized_user(phone):
+                user_id = self._get_user(phone)
+            sms_log = SmsLog(
+                direction=SmsDirection.OUTGOING,
+                phone=phone,
+                message=text,
+                status=SmsStatus.SENT,
+                related_sms_id=related_sms_id,
+                user_id=user_id
+            )
+            db.session.add(sms_log)
+            db.session.commit()
+            return sms_log
+
+    def _send_sms_worker(self, phone: str, text: str, related_sms_id: int = None, user_id: int = None) -> None:
+        """Thread-safe SendSMS + logging."""
+        message = {
+            "Text": text,
+            "SMSC": {"Location": 1, "Number": "+919822078000"},
+            "Number": phone,
+        }
+        
+        try:
+            self.sm.SendSMS(message)
+            self._log_sms_sent(phone, text, related_sms_id, user_id)
+            self.logger.info(f"SMS sent to {phone}: {text}")
+        except gammu.ERR_TIMEOUT:
+            self.connected = False
+            self._log_sms_failed(phone, text, "Timeout - SIM disconnected", related_sms_id, user_id)
+        except Exception as e:
+            self.logger.error(f"SMS failed to {phone}: {e}")
+            self._log_sms_failed(phone, text, str(e), related_sms_id, user_id)
+
+    def _log_sms_failed(self, phone: str, text: str, error: str, related_sms_id: int = None, user_id: int = None) -> SmsLog:
+        """Create FAILED SmsLog entry."""
+        with self.app.app_context():
+            sms_log = SmsLog(
+                direction=SmsDirection.OUTGOING,
+                phone=phone,
+                message=text,
+                status=SmsStatus.FAILED,
+                error=error,
+                related_sms_id=related_sms_id,
+                user_id=user_id
+            )
+            db.session.add(sms_log)
+            db.session.commit()
+            return sms_log
+
+
+    def send_sms(self, phone: str, text: str, related_sms_id: int = None, user_id: int = None):
+        """Send SMS asynchronously."""
+        thread = threading.Thread(
+            target=self._send_sms_worker, 
+            args=(phone, text, related_sms_id, user_id),
+            daemon=True
+        )
+        thread.start()

@@ -64,6 +64,11 @@ time.sleep(5)
 t2 = threading.Thread(target=processor.run, daemon=True)
 t2.start()
 
+# from database.models import User
+# user = User (phone = "+917038835527", name = "Swapnil", email = "veerswapnil00@gmail.com", is_owner = True, is_superuser = True)
+# with app.app_context():
+#     db.session.add(user)
+#     db.session.commit()
 try:
     while True:
         time.sleep(2)
@@ -71,6 +76,7 @@ except KeyboardInterrupt:
     config.cleanup_gpio()
     logger.info("Main loop interrupted - cleanup already registered")
 
+# TODO: Delete all not working
 # TODO: Create superuser
 # TODO: led moniter db integration
 # TODO: make lcd_display as plugin
@@ -78,9 +84,5 @@ except KeyboardInterrupt:
 # TODO: add testcases 
 # TODO: create multi pump logic
 
-# from database.models import User
-# user = User (phone = "+917038835527", name = "Swapnil", email = "veerswapnil00@gmail.com", is_owner = True, is_superuser = True)
-# with app.app_context():
-#     db.session.add(user)
-#     db.session.commit()
+
 # print(user)

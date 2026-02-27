@@ -28,16 +28,16 @@ class MainController:
         Parses the SMS text at a high level, decides action,
         and returns a reply string to send back to this sender.
         """
-        # delete_one_command
-        if re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', text, flags=re.IGNORECASE):
-            # cmd = self._create_command('DELETE_ONE', sender)
-            self.command_processor.handle(ctype = CommandType.DELETE_ONE, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
-            return None
-
         # delete_all_commands   
-        elif re.search(r'\b(ALL OFF)', text, flags=re.IGNORECASE):
+        if re.search(r'\b(ALL OFF)', text, flags=re.IGNORECASE):
             # cmd = self._create_command('DELETE_ALL', sender)
             self.command_processor.handle(ctype = CommandType.DELETE_ALL, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
+            return None
+
+        # delete_one_command
+        elif re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', text, flags=re.IGNORECASE):
+            # cmd = self._create_command('DELETE_ONE', sender)
+            self.command_processor.handle(ctype = CommandType.DELETE_ONE, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
             return None
 
         # STATUS
@@ -80,8 +80,12 @@ class MainController:
         mode = cmd_dict.get('mode') or 'idle'
         manual_remaining_min = None
         if mode == 'manual':
-            manual_remaining_min = round(cmd_dict.get('remaining_sec', 0) / 60)
-        
+            rem_sec = cmd_dict.get('remaining_sec', 0) or 0
+            dur_sec = cmd_dict.get('duration_sec', 0) or 0  # Fix typo + safe
+            manual_remaining_min = round((rem_sec - dur_sec) / 60) 
+            # manual_remaining_min = round(cmd_dict.get('remaining_sec', 0) / 60)
+            # manual_remaining_min = round((cmd_dict.get('remaining_sec') - cmd_dict.get('durstion_sec')) / 60)
+        # print(f"")
         status = {
             'power': self.power_service.is_power_available(),
             'mode': mode,
@@ -146,16 +150,12 @@ class MainController:
         """
         For unrecognized commands, return help text.
         """
-        sample_msg = """
-            Please send msg in correct format.
-            Accepts messages like:
-            - 'PUMP ON 120', 'ON 120', 'START 120'
-            - 'PUMP ON' (uses default)
-            - 'AUTO ON' - Motor starts in Auto mode
-            - 'OFF', 'STOP' - Off Auto mode / Delete Current Commands.
-            - 'ALL OFF' - Delete all commands.
-            - 'STATUS'
-            """
+        sample_msg ="""Send msg in correct format as below:
+ - 'PUMP ON 120', 'ON 120', 
+ - 'AUTO ON' - Motor starts in Auto mode
+ - 'OFF', 'STOP' - Off Auto mode / Delete Current Commands
+ - 'ALL OFF' - Delete all commands.
+ - 'STATUS'"""
         return sample_msg
     
     # Events
@@ -194,20 +194,22 @@ class EventHandler:
         sender = data.get("sender")
         mode = data.get("mode")
         duration_min = data.get("duration_min")
+        cmd_id = data.get("command_id")
         if sender:
             if mode == "manual" and duration_min:
-                text = f"Pump started for {duration_min} min."
+                text = f"#{cmd_id} Pump started for {duration_min} min."
             else:
-                text = "Pump started in AUTO mode."
+                text = f"#{cmd_id} Pump started in AUTO mode."
             self.sms_handler.send_sms(sender, text)
         self.logger.info(f"PUMP_STARTED: {data}")
     
     def _pump_completed(self, data: dict) -> None:
         sender = data.get("sender")
         mode = data.get("mode")
-        duration_min = data.get("duration_min")
+        duration_min = data.get("total_runtime_min")
+        cmd_id = data.get("command_id")
         if sender:
-            text = f"Pump completed. {duration_min} min total"
+            text = f"#{cmd_id}Pump completed, {duration_min} min total"
             self.sms_handler.send_sms(sender, text)
         self.logger.info(f"PUMP_COMPLETED: {data}")
     
@@ -279,8 +281,7 @@ class PowerStatusService:
         self.led_monitor = led_monitor
     
     def is_power_available(self) -> bool:
-        # return self.led_monitor.is_power_available()
-        return True
+        return self.led_monitor.is_power_available()
     
     def get_status(self) -> str:
         return self.led_monitor.get_status()
