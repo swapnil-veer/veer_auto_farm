@@ -125,20 +125,45 @@ class MainController:
 
     def _handle_status(self, sender: str) -> str:
         """
-        Build status message using phase_data + CommandProcessor state + LCD helper.
+        Build SMS status from raw system status.
         """
         status = self.get_system_status()
-        power = status["power"]
-        pump_text = "ON" if status["pump_on"] else "OFF"
-        rem = status["manual_remaining_min"]
-        rem_part = f"REM:{rem} min" if rem is not None else ""
-        
-        if status["mode"] == "auto":
-            if status["pump_on"]:
-                return f"PWR:{power}, PUMP:{pump_text} AUTO"
-            else:
-                return f"PWR:{power}, PUMP:{pump_text} AUTO WAIT PWR"
-        return f"PWR:{power}, PUMP:{pump_text}{rem_part}"
+
+        power_on = status.get("power", False)
+        pump_on = status.get("pump_on", False)
+        active_cmd = status.get("active_command")
+        waiting_cmd = status.get("waiting_for_power_command")
+        queued_cmds = status.get("queued_commands") or []
+
+        power_text = "ON" if power_on else "OFF"
+        pump_text = "ON" if pump_on else "OFF"
+
+        if active_cmd:
+            mode = (active_cmd.get("mode") or "").upper()
+
+            if mode == "MANUAL":
+                rem_sec = active_cmd.get("remaining_sec", 0) or 0
+                dur_sec = active_cmd.get("duration_sec", 0) or 0
+                remaining_sec = max(0, rem_sec - dur_sec)
+                rem_min = round(remaining_sec / 60)
+                return f"PWR:{power_text}, PUMP:{pump_text}, MANUAL, REM:{rem_min}m"
+
+            if mode == "AUTO":
+                return f"PWR:{power_text}, PUMP:{pump_text}, AUTO"
+
+            return f"PWR:{power_text}, PUMP:{pump_text}, RUNNING"
+
+        if waiting_cmd:
+            cmd_id = waiting_cmd.get("id") if isinstance(waiting_cmd, dict) else waiting_cmd.id
+            return f"PWR:{power_text}, PUMP:{pump_text}, WAIT PWR, CMD:{cmd_id}"
+
+        if queued_cmds:
+            next_cmd = queued_cmds[0]
+            cmd_id = next_cmd.get("id")
+            queue_count = len(queued_cmds)
+            return f"PWR:{power_text}, PUMP:{pump_text}, QUEUED:{queue_count}, NEXT:{cmd_id}"
+
+        return f"PWR:{power_text}, PUMP:{pump_text}, IDLE"
 
     def _handle_invalid(self, sender: str) -> str:
         """
