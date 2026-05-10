@@ -107,7 +107,6 @@ class FarmSMSHandler:
             try:
                 sms = sms_batch[0]
                 phone, text, folder, location = self._process_single_sms(sms)
-
                 sms_log_id = self._log_incoming_sms(phone, text)
                 self._authorize_sms_log(sms_log_id)
                 self._delete_sms(folder, location)
@@ -126,8 +125,8 @@ class FarmSMSHandler:
     def _is_authorized_user(self, phone: str) -> bool:
         with self.app.app_context():
             user = User.query.filter_by(phone=phone, is_active=True).first()
-            user_id = user.id
         if user:
+            user_id = user.id
             self.logger.info(f"User {user_id} authorized.")
             return True
 

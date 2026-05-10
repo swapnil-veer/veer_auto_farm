@@ -29,7 +29,7 @@ def create_app():
     # Initialize database using YOUR database.py method
     # init_db(app)
     
-    @app.route('/health')
+    @app.route('/')
     def health():
         return {'status': 'healthy', 'db': 'veer_farm.db ready'}
     return app

@@ -67,34 +67,28 @@ class MainController:
 
         else:
             return self._handle_invalid(sender=sender)
-
-        
+   
     def get_system_status(self) -> dict:
         """
-        Central status provider.
-        Uses phase_data, command_processor, sms_thread, etc.
-        Returns a single, stable structure for all UIs.
+        Central raw status provider.
+        Returns system facts, not LCD-specific derived text/labels.
         """
-        cmd_dict = self.command_processor.get_command(self.command_processor.cmd_id)  # or current cmd_id
-        
-        mode = cmd_dict.get('mode') or 'idle'
-        manual_remaining_min = None
-        if mode == 'manual':
-            rem_sec = cmd_dict.get('remaining_sec', 0) or 0
-            dur_sec = cmd_dict.get('duration_sec', 0) or 0  # Fix typo + safe
-            manual_remaining_min = round((rem_sec - dur_sec) / 60) 
-            # manual_remaining_min = round(cmd_dict.get('remaining_sec', 0) / 60)
-            # manual_remaining_min = round((cmd_dict.get('remaining_sec') - cmd_dict.get('durstion_sec')) / 60)
-        # print(f"")
-        status = {
-            'power': self.power_service.is_power_available(),
-            'mode': mode,
-            'pump_on': self.command_processor.pump_context_manager.relay_manager.get_pump_state(),  # pump_manager
-            'manual_remaining_min': manual_remaining_min,
-            'sim_ok': self.sms_handler.get_sim_status(),
-            'signal_strength': self.sms_handler.get_signal_strength() or 0,
+        active_cmd = None
+        if self.command_processor.cmd_id:
+            active_cmd = self.command_processor.get_command(self.command_processor.cmd_id)
+
+        waiting_cmd = self.command_processor.get_waiting_for_power_command()
+        queued_cmds = self.command_processor.get_queued_commands()
+
+        return {
+            "power": self.power_service.is_power_available(),
+            "pump_on": self.command_processor.pump_context_manager.relay_manager.get_pump_state(),
+            "active_command": active_cmd,
+            "waiting_for_power_command": waiting_cmd,
+            "queued_commands": queued_cmds,
+            "sim_ok": self.sms_handler.get_sim_status(),
+            "signal_strength": self.sms_handler.get_signal_strength() or 0,
         }
-        return status
         
     # === COMMAND HANDLERS (internal to MainController) ===
 

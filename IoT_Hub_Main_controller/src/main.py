@@ -76,13 +76,8 @@ except KeyboardInterrupt:
     config.cleanup_gpio()
     logger.info("Main loop interrupted - cleanup already registered")
 
-# TODO: Delete all not working
-# TODO: Create superuser
-# TODO: led moniter db integration
+
 # TODO: make lcd_display as plugin
 # TODO: this system should work without RPi module, so we can test code without Pi
 # TODO: add testcases 
 # TODO: create multi pump logic
-
-
-# print(user)

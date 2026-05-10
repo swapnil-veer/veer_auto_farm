@@ -118,7 +118,7 @@ class CommandProcessor:
             db.session.commit()
 
 
-    def run(self):
+    def run1(self):
         """Main loop: Resume ABORTED → Process QUEUED"""
         self.is_running = True
         self.logger.info("CommandProcessor started. Running continuously...")
@@ -133,18 +133,91 @@ class CommandProcessor:
                 if aborted_cmd:
                     self.logger.info(f"Resuming ABORTED command #{aborted_cmd.id}")
                     self._process_db_command(aborted_cmd.id)
-                    continue
             
-                # 2. NEW COMMANDS
-                queued_cmd = Command.query.filter_by(
-                    status = CommandStatus.QUEUED
-                ).order_by(Command.priority, Command.created_at).first()
+                else:
+                    # 2. NEW COMMANDS
+                    queued_cmd = Command.query.filter_by(
+                        status = CommandStatus.QUEUED
+                    ).order_by(Command.priority, Command.created_at).first()
             
-                if queued_cmd:
-                    self._process_db_command(queued_cmd.id)
+                    if queued_cmd:
+                        self._process_db_command(queued_cmd.id)
             
             time.sleep(self.poll_interval)
+    def run(self):
+        """Main loop: resume waiting/aborted work first, then process queued work."""
+        self.is_running = True
+        self.logger.info("CommandProcessor started. Running continuously...")
 
+        while self.is_running:
+            try:
+                waiting_cmd = self.get_waiting_for_power_command()
+
+                if waiting_cmd:
+                    self.logger.info(
+                        f"Resuming waiting command #{waiting_cmd.id} (status={waiting_cmd.status})"
+                    )
+                    self._process_db_command(waiting_cmd.id)
+
+                else:
+                    next_cmd = self.get_next_queued_command()
+
+                    if next_cmd:
+                        self.logger.info(f"Processing queued command #{next_cmd.id}")
+                        self._process_db_command(next_cmd.id)
+
+            except Exception as exc:
+                self.logger.exception(f"CommandProcessor loop error: {exc}")
+
+            time.sleep(self.poll_interval)
+
+
+    def get_waiting_for_power_command(self):
+        """
+        Return the highest-priority command that is not completed because power is unavailable.
+        For now ABORTED is treated as waiting-for-power recovery.
+        """
+        with self.app.app_context():
+            return (
+                Command.query
+                .filter_by(status=CommandStatus.ABORTED)
+                .order_by(Command.priority, Command.created_at)
+                .first()
+            )
+
+
+    def get_next_queued_command(self):
+        """Return the next queued command to be executed."""
+        with self.app.app_context():
+            return (
+                Command.query
+                .filter_by(status=CommandStatus.QUEUED)
+                .order_by(Command.priority, Command.created_at)
+                .first()
+            )
+
+
+    def get_queued_commands(self, limit=None):
+        """Return queued commands ordered by priority and creation time."""
+        with self.app.app_context():
+            query = (
+                Command.query
+                .filter_by(status=CommandStatus.QUEUED)
+                .order_by(Command.priority, Command.created_at)
+            )
+            rows = query.limit(limit).all() if limit else query.all()
+
+            return [
+                {
+                    "id": cmd.id,
+                    "mode": cmd.mode,
+                    "status": cmd.status.name if hasattr(cmd.status, "name") else str(cmd.status),
+                    "priority": cmd.priority,
+                    "created_at": cmd.created_at.isoformat() if cmd.created_at else None,
+                }
+                for cmd in rows
+            ]
+    
     def _process_db_command(self,cmd_id: int):
         """Full DB lifecycle: QUEUED → RUNNING → COMPLETED/ABORTED"""
         # 2. FAST CACHE for pump loop   

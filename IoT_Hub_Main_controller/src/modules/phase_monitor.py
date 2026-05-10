@@ -71,7 +71,7 @@ class LedMonitor:
 
             while True:
                 try:
-                    green = bool(GPIO.input(self.green_pin))
+                    green = not bool(GPIO.input(self.green_pin))       # voltage present => LED OFF
                     yellow = bool(GPIO.input(self.yellow_pin))
                     red = bool(GPIO.input(self.red_pin))
 
