@@ -1,312 +1,210 @@
+#main_controller.py
 import re
-from settings import DEFAULT_DURATION
 from logging_config import logger
-from database.models.command import Command, CommandStatus, CommandType
-
-
+from settings import DEFAULT_DURATION
+from database.models.command import CommandType, CommandStatus
 
 class MainController:
     """
-    Central brain:
-    - Receives user intents (SMS, HTTP, etc.)
-    - Delegates to CommandProcessor for pump control
-    - Builds response messages for users
-    - Reads system status (phase_monitor, CommandProcessor state)
+    Application coordinator:
+    - Parses incoming user intents (SMS, HTTP, etc.)
+    - Creates commands in DB
+    - Requests execution control via CommandEngine
+    - Builds human-readable responses
+    - Handles domain events
     """
 
-    def __init__(self, command_processor, led_monitor, sms_handler):
-        self.command_processor = command_processor    # CommandProcessor instance
+    def __init__(self, command_repo, command_engine, power_service,sms_handler, notifier,):
+        self.command_repo = command_repo
+        self.command_engine = command_engine
+        self.power_service = power_service
         self.sms_handler = sms_handler
+        self.notifier = notifier
         self.logger = logger
-        self._event_handler = EventHandler(sms_handler=self.sms_handler, logger=self.logger)
-        self.power_service = PowerStatusService(led_monitor)
 
-    # === PUBLIC ENTRY POINT (for SMS layer) ===
-    def handle_incoming_sms(self, sender: str, text: str, sms_log_id = None, user_id = None) -> str:
+    # ------------------------------------------------------------------
+    # Incoming SMS / API entry point
+    # ------------------------------------------------------------------
+
+    def handle_incoming_sms(
+        self,
+        sender: str,
+        text: str,
+        sms_log_id: int | None = None,
+        user_id: int | None = None,
+        ) -> str | None:
         """
-        Entry point called by sms_processor.
-        Parses the SMS text at a high level, decides action,
-        and returns a reply string to send back to this sender.
+        Parse incoming SMS text and trigger system intent.
+        Returns optional reply text.
         """
-        # delete_all_commands   
-        if re.search(r'\b(ALL OFF)', text, flags=re.IGNORECASE):
-            # cmd = self._create_command('DELETE_ALL', sender)
-            self.command_processor.handle(ctype = CommandType.DELETE_ALL, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
+
+        text = text.strip()
+
+        # ALL OFF
+        if re.search(r"\bALL\s*OFF\b", text, re.IGNORECASE):
+            self._create_system_command(
+            CommandType.DELETE_ALL,
+            sender,
+            sms_log_id,
+            user_id,
+            )
             return None
 
-        # delete_one_command
-        elif re.search(r'\b(OFF|STOP|SHUT\s*DOWN)\b', text, flags=re.IGNORECASE):
-            # cmd = self._create_command('DELETE_ONE', sender)
-            self.command_processor.handle(ctype = CommandType.DELETE_ONE, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
+        # OFF / STOP
+        if re.search(r"\b(OFF|STOP|SHUT\s*DOWN)\b", text, re.IGNORECASE):
+            self.command_engine.request_manual_stop()
+            self._create_system_command(
+            CommandType.DELETE_ONE,
+            sender,
+            sms_log_id,
+            user_id,
+            )
             return None
 
         # STATUS
-        elif re.search(r'\bSTATUS\b', text, flags=re.IGNORECASE):
-            return self._handle_status(sender=sender)
-        
-        # For auto mode
-        elif re.search(r'\b(Auto|Auto on)\b', text, flags=re.IGNORECASE):
-            # TODO: replace direct add_command call with brain.handle_incoming_sms
-            # cmd = self._create_command('AUTO_ON', sender)
-            self.command_processor.handle(ctype = CommandType.AUTO_ON, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
-            return None
-        
-        # ON with optional duration
-        elif re.search(r'\b(ON|START)\b', text, flags=re.IGNORECASE):
-            m = re.search(r'(\d+)', text)
-            if m:
-                min = int(m.group(1))
-            else:
-                min = DEFAULT_DURATION
-            # cmd = self._create_command('MANUAL_ON', sender, min)
-            try :
-                self.command_processor.handle(ctype = CommandType.MANUAL_ON, duration_minutes = min, sender = sender, sms_log_id = sms_log_id, user_id=user_id)
-            except ValueError as err_msg:
-                return err_msg
+        if re.search(r"\bSTATUS\b", text, re.IGNORECASE):
+            return self._build_status_response()
+
+        # AUTO
+        if re.search(r"\bAUTO\b", text, re.IGNORECASE):
+            self._create_system_command(
+            CommandType.AUTO_ON,
+            sender,
+            sms_log_id,
+            user_id,
+            )
             return None
 
-        else:
-            return self._handle_invalid(sender=sender)
-   
-    def get_system_status(self) -> dict:
+        # MANUAL ON
+        if re.search(r"\b(ON|START)\b", text, re.IGNORECASE):
+            minutes = self._extract_minutes(text) or DEFAULT_DURATION
+            self._create_system_command(
+            CommandType.MANUAL_ON,
+            sender,
+            sms_log_id,
+            user_id,
+            duration_minutes=minutes,
+            )
+            return None
+
+        return self._invalid_command_message()
+
+    # ------------------------------------------------------------------
+    # Command creation helpers (NO execution here)
+    # ------------------------------------------------------------------
+
+    def _create_system_command(
+        self,
+        ctype: CommandType,
+        sender: str,
+        sms_log_id: int | None,
+        user_id: int | None,
+        duration_minutes: int | None = None,
+        ):
+        self.command_repo.create(
+            ctype=ctype,
+            sender_phone=sender,
+            sms_id=sms_log_id,
+            user_id=user_id,
+            status=CommandStatus.QUEUED
+            if ctype in (CommandType.MANUAL_ON, CommandType.AUTO_ON)
+            else CommandStatus.COMPLETED,
+            duration_sec=duration_minutes * 60 if duration_minutes else None,
+            remaining_sec=duration_minutes * 60 if duration_minutes else None,
+        )
+
+    # ------------------------------------------------------------------
+    # Status / Messaging
+    # ------------------------------------------------------------------
+
+    def _build_status_response(self) -> str:
         """
-        Central raw status provider.
-        Returns system facts, not LCD-specific derived text/labels.
+        Build SMS-friendly system status text.
         """
-        active_cmd = None
-        if self.command_processor.cmd_id:
-            active_cmd = self.command_processor.get_command(self.command_processor.cmd_id)
+        power_on = self.power_service.is_power_available()
+        signal = self.sms_handler.get_signal_strength()
+        sim_ok = self.sms_handler.get_sim_status()
 
-        waiting_cmd = self.command_processor.get_waiting_for_power_command()
-        queued_cmds = self.command_processor.get_queued_commands()
+        power_txt = "ON" if power_on else "OFF"
+        signal_txt = f"{signal}%" if sim_ok else "NO SIM"
 
-        return {
-            "power": self.power_service.is_power_available(),
-            "pump_on": self.command_processor.pump_context_manager.relay_manager.get_pump_state(),
-            "active_command": active_cmd,
-            "waiting_for_power_command": waiting_cmd,
-            "queued_commands": queued_cmds,
-            "sim_ok": self.sms_handler.get_sim_status(),
-            "signal_strength": self.sms_handler.get_signal_strength() or 0,
-        }
-        
-    # === COMMAND HANDLERS (internal to MainController) ===
+        return f"PWR:{power_txt}, SIG:{signal_txt}"
 
-    def _handle_off(self, sender: str) -> str:
+    def _invalid_command_message(self) -> str:
+        return (
+        "Invalid command.\n"
+        "Examples:\n"
+        "- ON 120\n"
+        "- AUTO ON\n"
+        "- OFF / STOP\n"
+        "- ALL OFF\n"
+        "- STATUS"
+        )
+
+    def _extract_minutes(self, text: str) -> int | None:
+        match = re.search(r"(\d+)", text)
+        return int(match.group(1)) if match else None
+
+    # ------------------------------------------------------------------
+    # Event handling (from CommandEventEmitter)
+    # ------------------------------------------------------------------
+
+    def handle_event(self, event: dict):
         """
-        Handle OFF / STOP request:
-        - tell CommandProcessor to delete current command
-        - build acknowledgement message
+        Receive and react to command lifecycle events.
         """
-        self.command_processor.delete_one()
-        return "Pump OFF request received. Stopping current command (if any)."
-
-    def _handle_all_off(self, sender: str) -> str:
-        """
-        Handle ALL OFF request:
-        - delete current + queued commands
-        """
-        self.command_processor.delete_all()
-        return "All commands cleared. Pump will be OFF."
-
-    def _handle_manual_on(self, sender: str, minutes: int) -> str:
-        """
-        Handle 'ON <minutes>' or default ON.
-        """
-        self.command_processor.add_command(duration_minutes=minutes, sender=sender)
-        return f"Request accepted: Pump ON for {minutes} min."
-
-    def _handle_auto_on(self, sender: str) -> str:
-        """
-        Handle AUTO mode start.
-        """
-        self.command_processor.add_command(sender=sender, mode="auto")
-        return "Request accepted: Pump ON in AUTO mode (runs until OFF)."
-
-    def _handle_status(self, sender: str) -> str:
-        """
-        Build SMS status from raw system status.
-        """
-        status = self.get_system_status()
-
-        power_on = status.get("power", False)
-        pump_on = status.get("pump_on", False)
-        active_cmd = status.get("active_command")
-        waiting_cmd = status.get("waiting_for_power_command")
-        queued_cmds = status.get("queued_commands") or []
-
-        power_text = "ON" if power_on else "OFF"
-        pump_text = "ON" if pump_on else "OFF"
-
-        if active_cmd:
-            mode = (active_cmd.get("mode") or "").upper()
-
-            if mode == "MANUAL":
-                rem_sec = active_cmd.get("remaining_sec", 0) or 0
-                dur_sec = active_cmd.get("duration_sec", 0) or 0
-                remaining_sec = max(0, rem_sec - dur_sec)
-                rem_min = round(remaining_sec / 60)
-                return f"PWR:{power_text}, PUMP:{pump_text}, MANUAL, REM:{rem_min}m"
-
-            if mode == "AUTO":
-                return f"PWR:{power_text}, PUMP:{pump_text}, AUTO"
-
-            return f"PWR:{power_text}, PUMP:{pump_text}, RUNNING"
-
-        if waiting_cmd:
-            cmd_id = waiting_cmd.get("id") if isinstance(waiting_cmd, dict) else waiting_cmd.id
-            return f"PWR:{power_text}, PUMP:{pump_text}, WAIT PWR, CMD:{cmd_id}"
-
-        if queued_cmds:
-            next_cmd = queued_cmds[0]
-            cmd_id = next_cmd.get("id")
-            queue_count = len(queued_cmds)
-            return f"PWR:{power_text}, PUMP:{pump_text}, QUEUED:{queue_count}, NEXT:{cmd_id}"
-
-        return f"PWR:{power_text}, PUMP:{pump_text}, IDLE"
-
-    def _handle_invalid(self, sender: str) -> str:
-        """
-        For unrecognized commands, return help text.
-        """
-        sample_msg ="""Send msg in correct format as below:
- - 'PUMP ON 120', 'ON 120', 
- - 'AUTO ON' - Motor starts in Auto mode
- - 'OFF', 'STOP' - Off Auto mode / Delete Current Commands
- - 'ALL OFF' - Delete all commands.
- - 'STATUS'"""
-        return sample_msg
-    
-    # Events
-    def handle_event(self, event: dict) -> None:
-        """Entry point for CommandProcessor events."""
-        self._event_handler.handle(event)
-
-
-class EventHandler:
-    """Only event-specific logic; no orchestration."""
-    def __init__(self, sms_handler, logger):
-        self.sms_handler = sms_handler
-        self.logger = logger
-
-    def handle(self, event: dict) -> None:
         etype = event.get("type")
         data = event.get("data", {})
+        sender = data.get("sender")
+
+        if not sender:
+            self.logger.info(f"Event received: {etype}")
+            return
 
         dispatch = {
-            "PUMP_STARTED": self._pump_started,
-            "PUMP_COMPLETED": self._pump_completed,
-            "PUMP_ABORTED_POWER_LOSS": self._on_power_loss,
-            "PUMP_AUTO_STOPPED": self._on_pump_auto_stopped,
-            "PUMP_ABORTED_MANUAL_STOP": self._on_pump_man_stopped,
-            "COMMAND_DELETED_CURRENT": self._on_command_deleted,
-            "PUMP_CLEARED_ALL": self._pump_cleared_all,
-            "COMMAND_QUEUED" : self._command_queued,
+        "PUMP_STARTED": self._on_pump_started,
+        "PUMP_COMPLETED": self._on_pump_completed,
+        "PUMP_ABORTED_POWER_LOSS": self._on_power_loss,
+        "PUMP_ABORTED_MANUAL_STOP": self._on_manual_stop,
+        "PUMP_AUTO_STOPPED": self._on_auto_stop,
+        "PUMP_CLEARED_ALL": self._on_all_cleared,
+        "COMMAND_QUEUED": self._on_command_queued,
         }
+
         handler = dispatch.get(etype)
         if handler:
-            handler(data)
+            handler(sender, data)
         else:
-            self.logger.warning(f"Unknown event: {etype} {data}")
+            self.logger.warning(f"Unhandled event: {etype}")
 
-    def _pump_started(self, data: dict) -> None:
-        sender = data.get("sender")
-        mode = data.get("mode")
-        duration_min = data.get("duration_min")
-        cmd_id = data.get("command_id")
-        if sender:
-            if mode == "manual" and duration_min:
-                text = f"#{cmd_id} Pump started for {duration_min} min."
-            else:
-                text = f"#{cmd_id} Pump started in AUTO mode."
-            self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"PUMP_STARTED: {data}")
-    
-    def _pump_completed(self, data: dict) -> None:
-        sender = data.get("sender")
-        mode = data.get("mode")
-        duration_min = data.get("total_runtime_min")
-        cmd_id = data.get("command_id")
-        if sender:
-            text = f"#{cmd_id}Pump completed, {duration_min} min total"
-            self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"PUMP_COMPLETED: {data}")
-    
-    def _on_power_loss(self, data : dict) -> None:
-        sender = data.get("sender")
-        mode = data.get("mode")
-        duration_min = data.get("duration_min")
-        if sender:
-            if mode == "manual" and duration_min:
-                text = f"Power loss. Waiting, {duration_min} min left"
-            else:
-                text = "Power loss in AUTO mode. Waiting for power to resume."
-            self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"PUMP_ABORTED_POWER_LOSS: {data}")
+    # ------------------------------------------------------------------
+    # Event handlers (SMS side effects only)
+    # ------------------------------------------------------------------
 
-    def _on_pump_auto_stopped(self, data : dict) -> None:
-        sender = data.get("sender")
-        if sender:
-                text = f"AUTO mode stopped by user {sender}"
-                self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"PUMP_AUTO_STOPPED: {data}")
+    def _on_pump_started(self, sender, data):
+        msg = f"#{data['command_id']} Pump started ({data['mode'].upper()})"
+        self.notifier.send(sender, msg)
 
-    def _on_pump_man_stopped(self, data : dict) -> None:
-        sender = data.get("sender")
-        if sender:
-                text = f"Pump manually stopped by user {sender}"
-                self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"PUMP_ABORTED_MANUAL_STOP: {data}")
+    def _on_pump_completed(self, sender, data):
+        msg = f"#{data['command_id']} Completed in {data['total_runtime_min']} min"
+        self.notifier.send(sender, msg)
 
-    def _on_command_deleted(self, data: dict) -> None:
-        sender = data.get("sender")
-        if sender:
-                text = f"This Command deleted without run by user {sender}"
-                self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"COMMAND_DELETED_CURRENT: {data}")
+    def _on_power_loss(self, sender, data):
+        self.notifier.send(sender, "Power lost. Waiting to resume.")
 
-    def _pump_cleared_all(self, data: dict) -> None:
-        """DEL ALL - Comprehensive cleanup report"""
-        sender = data.get("sender")
-        deleted_count = data.get("deleted_count", 0)
-        running_stopped = data.get("running_stopped", False)
-        
-        deleted_text = f"{deleted_count} queued/aborted" if deleted_count > 0 else "No queued"
-        running_text = "🛑 STOPPED" if running_stopped else "None running"
-        
-        text = f"🧹 Queue cleared!\n{deleted_text} TERMINATED. Current pump: {running_text}"
-        
-        if sender:
-            self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"PUMP_CLEARED_ALL: {text}")
+    def _on_manual_stop(self, sender, data):
+        self.notifier.send(sender, "Pump stopped manually.")
 
-    def _command_queued(self, data: dict) -> None:
-        """Command added to queue"""
-        sender = data.get("sender")
-        ctype = data.get("ctype", "unknown")
-        duration = data.get("duration_min")
-        position = data.get("position", "?")
-        if duration:
-            text = f"Request accepted: #{data['command_id']} queued ({ctype}, {duration}min)"
-        else:
-            text = f"Request accepted: #{data['command_id']} queued ({ctype})"
-        if sender:
-            self.sms_handler.send_sms(sender, text)
-        self.logger.info(f"COMMAND_QUEUED: {data}")
+    def _on_auto_stop(self, sender, data):
+        self.notifier.send(sender, "AUTO mode stopped.")
 
+    def _on_all_cleared(self, sender, data):
+        msg = (
+        f"Queue cleared. "
+        f"{data.get('deleted_count', 0)} pending removed."
+        )
+        self.notifier.send(sender, msg)
 
-class PowerStatusService:
-    def __init__(self, led_monitor):
-        self.led_monitor = led_monitor
-    
-    def is_power_available(self) -> bool:
-        return self.led_monitor.is_power_available()
-    
-    def get_status(self) -> str:
-        return self.led_monitor.get_status()
-
-
-
-
-
-
+    def _on_command_queued(self, sender, data):
+        msg = f"Command #{data['command_id']} queued."
+        self.notifier.send(sender, msg)
