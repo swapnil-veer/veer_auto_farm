@@ -9,7 +9,6 @@ GPIO adapter contract:
 - gpio.LOW / gpio.HIGH
 - setmode(), setup(), cleanup()
 """
-
 from logging_config import logger
 from app import db
 from database.models.gpio_config import GpioConfig, GpioType

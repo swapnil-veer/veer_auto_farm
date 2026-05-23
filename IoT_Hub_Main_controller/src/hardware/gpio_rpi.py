@@ -24,8 +24,27 @@ class RaspberryPiGPIO:
         self.GPIO.cleanup()
 
     # constants
-    BCM = lambda self: self.GPIO.BCM
-    OUT = lambda self: self.GPIO.OUT
-    IN = lambda self: self.GPIO.IN
-    LOW = lambda self: self.GPIO.LOW
-    HIGH = lambda self: self.GPIO.HIGH
+    # BCM = lambda self: self.GPIO.BCM
+    # OUT = lambda self: self.GPIO.OUT
+    # IN = lambda self: self.GPIO.IN
+    # LOW = lambda self: self.GPIO.LOW
+    # HIGH = lambda self: self.GPIO.HIGH
+    @property
+    def BCM(self):
+        return self.GPIO.BCM
+
+    @property
+    def OUT(self):
+        return self.GPIO.OUT
+
+    @property
+    def IN(self):
+        return self.GPIO.IN
+
+    @property
+    def LOW(self):
+        return self.GPIO.LOW
+
+    @property
+    def HIGH(self):
+        return self.GPIO.HIGH

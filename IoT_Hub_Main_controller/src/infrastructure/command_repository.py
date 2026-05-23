@@ -21,6 +21,14 @@ class CommandRepository:
             Command.query.filter_by(id=cmd_id).update(updates)
             db.session.commit()
 
+    def get_active_command(self):
+        with self.app.app_context():
+            return (
+            Command.query
+            .filter_by(status=CommandStatus.RUNNING)
+            .first()
+            )
+
     def get_next_queued(self):
         with self.app.app_context():
             return (

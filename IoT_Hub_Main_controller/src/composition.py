@@ -27,6 +27,7 @@ else:
     from hardware.sim_modem import SIMModem
     from hardware.pump_gpio import PumpGPIO
     from hardware.phase_gpio import PhaseGPIO
+    from hardware.lcd_hw import LCDDriver 
 
 
 # Services
@@ -41,6 +42,8 @@ from services.command_engine import CommandEngine
 from services.command_scheduler import CommandScheduler
 from services.command_events import CommandEventEmitter
 from services.logging_handler import EventLoggingHandler
+
+from services.lcd_service import LCDService
 
 # Controller
 from main_controller import MainController
@@ -83,6 +86,7 @@ def compose_application(app):
     pump_gpio = PumpGPIO(gpio, pump_pin)
     phase_gpio = PhaseGPIO()
     sim_modem = SIMModem()
+    lcd_driver = LCDDriver()
 
     # -------------------------
     # Core services
@@ -103,11 +107,22 @@ def compose_application(app):
     )
 
     sms_notifier = SMSNotifier(sim_service)
-
+  
     # -------------------------
     # Power abstraction
     # -------------------------
     power_service = phase_monitor # conforms to is_power_available()
+
+    # -------------------------
+    # Voluntary Services
+    # -------------------------
+    lcd_service = LCDService(
+        lcd_driver=lcd_driver,
+        command_repo=command_repo,
+        sim_service=sim_service,
+        power_service=power_service,
+        logger=logger,
+    )
 
     # -------------------------
     # Command orchestration
@@ -140,6 +155,12 @@ def compose_application(app):
 
     event_emitter.register(main_controller.handle_event)
     event_emitter.register(EventLoggingHandler.handle)
+    event_emitter.register(lcd_service.handle_event)
+
+
+
+
+
     # -------------------------
     # SMS processing service
     # -------------------------
