@@ -30,6 +30,12 @@ def main():
     ctx = compose_application(app)
     logger.info("System started successfully")
 
+    # from database.models import User
+    # user = User (phone = "+917038835527", name = "Swapnil", email = "veerswapnil00@gmail.com", is_owner = True, is_superuser = True)
+    # with app.app_context():
+    #     db.session.add(user)
+    #     db.session.commit()
+
     try:
         while True:
             time.sleep(2)

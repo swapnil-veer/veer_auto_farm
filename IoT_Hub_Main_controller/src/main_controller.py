@@ -1,5 +1,7 @@
 #main_controller.py
 import re
+import threading
+import time
 from logging_config import logger
 from settings import DEFAULT_DURATION
 from database.models.command import CommandType, CommandStatus
@@ -14,13 +16,15 @@ class MainController:
     - Handles domain events
     """
 
-    def __init__(self, command_repo, command_engine, power_service,sms_handler, notifier,):
-        self.command_repo = command_repo
+    def __init__(self, command_engine, power_service, sim_service, notifier, sms_poll_interval=5):
         self.command_engine = command_engine
         self.power_service = power_service
-        self.sms_handler = sms_handler
+        self.sim_service = sim_service
         self.notifier = notifier
         self.logger = logger
+        self._stop_event = threading.Event()
+        self._thread = None
+        self.sms_poll_interval = sms_poll_interval
 
     # ------------------------------------------------------------------
     # Incoming SMS / API entry point
@@ -30,7 +34,7 @@ class MainController:
         self,
         sender: str,
         text: str,
-        sms_log_id: int | None = None,
+        sms_id: int | None = None,
         user_id: int | None = None,
         ) -> str | None:
         """
@@ -42,10 +46,10 @@ class MainController:
 
         # ALL OFF
         if re.search(r"\bALL\s*OFF\b", text, re.IGNORECASE):
-            self._create_system_command(
+            self.command_engine._create_command(
             CommandType.DELETE_ALL,
             sender,
-            sms_log_id,
+            sms_id,
             user_id,
             )
             return None
@@ -53,10 +57,10 @@ class MainController:
         # OFF / STOP
         if re.search(r"\b(OFF|STOP|SHUT\s*DOWN)\b", text, re.IGNORECASE):
             self.command_engine.request_manual_stop()
-            self._create_system_command(
+            self.command_engine._create_command(
             CommandType.DELETE_ONE,
             sender,
-            sms_log_id,
+            sms_id,
             user_id,
             )
             return None
@@ -67,10 +71,10 @@ class MainController:
 
         # AUTO
         if re.search(r"\bAUTO\b", text, re.IGNORECASE):
-            self._create_system_command(
+            self.command_engine._create_command(
             CommandType.AUTO_ON,
             sender,
-            sms_log_id,
+            sms_id,
             user_id,
             )
             return None
@@ -78,40 +82,16 @@ class MainController:
         # MANUAL ON
         if re.search(r"\b(ON|START)\b", text, re.IGNORECASE):
             minutes = self._extract_minutes(text) or DEFAULT_DURATION
-            self._create_system_command(
-            CommandType.MANUAL_ON,
-            sender,
-            sms_log_id,
-            user_id,
+            self.command_engine._create_command(
+            ctype=CommandType.MANUAL_ON,
+            sender=sender,
+            sms_id=sms_id,
+            user_id=user_id,
             duration_minutes=minutes,
             )
             return None
 
         return self._invalid_command_message()
-
-    # ------------------------------------------------------------------
-    # Command creation helpers (NO execution here)
-    # ------------------------------------------------------------------
-
-    def _create_system_command(
-        self,
-        ctype: CommandType,
-        sender: str,
-        sms_log_id: int | None,
-        user_id: int | None,
-        duration_minutes: int | None = None,
-        ):
-        self.command_repo.create(
-            ctype=ctype,
-            sender_phone=sender,
-            sms_id=sms_log_id,
-            user_id=user_id,
-            status=CommandStatus.QUEUED
-            if ctype in (CommandType.MANUAL_ON, CommandType.AUTO_ON)
-            else CommandStatus.COMPLETED,
-            duration_sec=duration_minutes * 60 if duration_minutes else None,
-            remaining_sec=duration_minutes * 60 if duration_minutes else None,
-        )
 
     # ------------------------------------------------------------------
     # Status / Messaging
@@ -122,8 +102,8 @@ class MainController:
         Build SMS-friendly system status text.
         """
         power_on = self.power_service.is_power_available()
-        signal = self.sms_handler.get_signal_strength()
-        sim_ok = self.sms_handler.get_sim_status()
+        signal = self.sim_service.get_signal_strength()
+        sim_ok = self.sim_service.get_sim_status()
 
         power_txt = "ON" if power_on else "OFF"
         signal_txt = f"{signal}%" if sim_ok else "NO SIM"
@@ -208,3 +188,64 @@ class MainController:
     def _on_command_queued(self, sender, data):
         msg = f"Command #{data['command_id']} queued."
         self.notifier.send(sender, msg)
+
+    # ------------------------------------------------------------------
+    # SMS polling
+    # ------------------------------------------------------------------
+    def start_sms_polling(self):
+        """Start background SMS processing"""
+        self._thread = threading.Thread(target=self._process_loop, daemon=True)
+        self._thread.start()
+        self.logger.info("SMS polling started")
+    
+    def stop_sms_polling(self):
+        """Stop background processing"""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+    
+    def _process_loop(self):
+        """Background loop: Poll → Process → Update"""
+        while not self._stop_event.wait(2):  # Poll every 2s
+            try:
+                self._process_next_sms()
+                time.sleep(self.sms_poll_interval)
+            except Exception as e:
+                self.logger.error(f"SMSService error: {e}")
+    
+    def _process_next_sms(self):
+        """Process AUTHORIZED → PROCESSED (MainController handles SMS)"""
+
+        authorized_sms = self.sim_service.get_authorized_unprocessed()
+        for sms_dict in authorized_sms:
+            sender=sms_dict['sender'] 
+            message=sms_dict['message']
+            sms_id=sms_dict['id']
+            user_id = sms_dict['user_id']
+            self.logger.info(f"Processing SMS {sms_id}: {message[:50]}...")
+
+            try:
+                # MainController: Parse + Command + Send SMS + Log outgoing
+                reply = self.handle_incoming_sms(
+                    sender=sender, 
+                    text=message, 
+                    sms_id=sms_id,
+                    user_id = user_id,
+                )
+
+            except Exception as e:
+                print(e)
+                self.sim_service.mark_failed(sms_id)
+            
+            else:
+                # Mark PROCESSED (MainController handles SMS sending)
+                self.sim_service.mark_processed(sms_id)
+
+                if reply:
+                    try:
+                        self.sim_service.send_sms(phone=sender, message=reply, rel_sms_id=sms_id)
+                    except Exception as e:
+                        print(e)
+                self.logger.info(f"SMS {sms_id} processed successfully")
+                
+

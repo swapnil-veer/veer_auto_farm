@@ -55,3 +55,13 @@ class SmsLog(db.Model):
     
     def __repr__(self):
         return f'<SmsLog(id={self.id}, phone={self.phone}, status={self.status.value})>'
+    
+    def _to_dict(self):
+        return {
+            "id" : self.id,
+            "sender" : self.phone,
+            "message" : self.message,
+            "status" : self.status,
+            "user_id" : self.user_id,
+            "created_at" : self.created_at,
+        }

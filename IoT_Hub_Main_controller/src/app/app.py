@@ -25,6 +25,8 @@ def create_app():
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    # migrate = Migrate(app, db)
+
     
     # Initialize database using YOUR database.py method
     # init_db(app)

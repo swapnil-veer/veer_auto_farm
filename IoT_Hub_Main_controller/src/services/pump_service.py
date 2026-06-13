@@ -15,7 +15,7 @@ class PumpService:
 
         try:
             self.gpio.on()
-            run_id = self.repo.start_run(self.pump_id, command_id)
+            run_id = self.repo.start_run(pump_id=self.pump_id, command_id=command_id)
             self.current_run_id = run_id
             return run_id
         except Exception:

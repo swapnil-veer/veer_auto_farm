@@ -46,3 +46,13 @@ class CommandRepository:
             .order_by(Command.priority, Command.created_at)
             .first()
             )
+
+    def delete(self, cmd_id: int, ):
+        with self.app.app_context():
+            cmd = Command.query.get(cmd_id)
+
+            if not cmd:
+                return False
+
+            db.session.delete(cmd)
+            db.session.commit()

@@ -11,6 +11,7 @@ from infrastructure.command_repository import CommandRepository
 from infrastructure.pump_repository import PumpRepository
 from infrastructure.sms_repository import SMSRepository
 from infrastructure.phase_repository import PhaseRepository
+from infrastructure.user_repository import UserRepository
 
 # Hardware
 APP_MODE = os.getenv("APP_MODE", "prod")
@@ -36,13 +37,11 @@ from services.pump_service import PumpService
 from services.pump_context import PumpContextManager
 from services.phase_monitor import PhaseMonitor
 from services.sim_service import SIMService
-from services.sms_service import SMSService
 from services.sms_notifier import SMSNotifier
 from services.command_engine import CommandEngine
 from services.command_scheduler import CommandScheduler
 from services.command_events import CommandEventEmitter
-from services.logging_handler import EventLoggingHandler
-
+# from services.logging_handler import EventLoggingHandler
 from services.lcd_service import LCDService
 
 # Controller
@@ -53,10 +52,10 @@ class ApplicationContext:
     Holds references to all long-lived services.
     Useful for startup, shutdown, and diagnostics.
     """
-    def __init__(self, app, scheduler, sms_service, phase_monitor):
+    def __init__(self, app, scheduler, sim_service, phase_monitor):
         self.app = app
         self.scheduler = scheduler
-        self.sms_service = sms_service
+        self.sim_service = sim_service
         self.phase_monitor = phase_monitor
 
 def compose_application(app):
@@ -77,6 +76,7 @@ def compose_application(app):
     pump_repo = PumpRepository(app)
     sms_repo = SMSRepository(app)
     phase_repo = PhaseRepository(app)
+    user_repo = UserRepository(app)
 
     # -------------------------
     # Hardware adapters
@@ -102,7 +102,8 @@ def compose_application(app):
 
     sim_service = SIMService(
         modem=sim_modem,
-        repository=sms_repo,
+        user_repo=user_repo,
+        sms_repo=sms_repo,
         poll_interval=5,
     )
 
@@ -133,7 +134,7 @@ def compose_application(app):
         pump_context_manager=pump_context,
         power_service=power_service,
         command_repo=command_repo,
-        event_handler=event_emitter,
+        event_emitter=event_emitter,
     )
 
     scheduler = CommandScheduler(
@@ -146,29 +147,16 @@ def compose_application(app):
     # Main controller
     # -------------------------
     main_controller = MainController(
-        command_repo=command_repo,
         command_engine=command_engine,
         power_service=power_service,
-        sms_handler=sim_service,
+        sim_service=sim_service,
         notifier=sms_notifier,
     )
 
     event_emitter.register(main_controller.handle_event)
-    event_emitter.register(EventLoggingHandler.handle)
-    event_emitter.register(lcd_service.handle_event)
+    # event_emitter.register(EventLoggingHandler.handle)
+    # event_emitter.register(lcd_service.handle_event)
 
-
-
-
-
-    # -------------------------
-    # SMS processing service
-    # -------------------------
-    sms_service = SMSService(
-        main_controller=main_controller,
-        sms_handler=sim_service,
-        app=app,
-    )
 
     # -------------------------
     # Start background workers
@@ -178,13 +166,14 @@ def compose_application(app):
         daemon=True
         ).start()
 
-    sms_service.start()
+    # sms polling thread
+    main_controller.start_sms_polling()
 
     logger.info("Application composition complete.")
 
     return ApplicationContext(
         app=app,
         scheduler=scheduler,
-        sms_service=sms_service,
+        sim_service=sim_service,
         phase_monitor=phase_monitor,
         )

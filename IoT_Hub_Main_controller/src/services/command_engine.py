@@ -11,13 +11,37 @@ class CommandEngine:
 
     UPDATE_INTERVAL = 5 # seconds (DB write throttle)
 
-    def __init__(self, pump_context_manager, power_service, command_repo, event_handler):
+    def __init__(self, pump_context_manager, power_service, command_repo, event_emitter):
         self.pump_ctx = pump_context_manager
         self.power = power_service
-        self.repo = command_repo
-        self.event_handler = event_handler
+        self.command_repo = command_repo
+        self.event_emitter = event_emitter
         self.manual_stop = False
         self.logger = logger
+
+
+    def _create_command(
+        self,
+        ctype: CommandType,
+        sender: str,
+        sms_id: int | None,
+        user_id: int | None,
+        duration_minutes: int | None = None,
+        ):
+        print("in create command")
+        self.command_repo.create(
+            ctype=ctype,
+            sender_phone=sender,
+            sms_id=sms_id,
+            user_id=user_id,
+            priority = 1,
+            status=CommandStatus.QUEUED
+            # status = CommandStatus.CREATED
+            if ctype in (CommandType.MANUAL_ON, CommandType.AUTO_ON)
+            else CommandStatus.COMPLETED,
+            duration_sec=duration_minutes * 60 if duration_minutes else None,
+            remaining_sec=duration_minutes * 60 if duration_minutes else None,
+        )
 
     # --------------------------------------------------
     # Public control
@@ -32,14 +56,14 @@ class CommandEngine:
 
     def execute(self, cmd_id: int):
 
-        cmd = self.repo.get(cmd_id)
+        cmd = self.command_repo.get(cmd_id)
         if not cmd:
             return
 
         try:
             self._mark_running(cmd)
 
-            with self.pump_ctx:
+            with self.pump_ctx(cmd_id):
                 result = self._run_loop(cmd)
 
             self._handle_result(cmd, result)
@@ -76,7 +100,7 @@ class CommandEngine:
             now = time.time()
             if now - last_persist >= self.UPDATE_INTERVAL:
                 elapsed = self._get_elapsed(start_time)
-                self.repo.update(cmd.id, duration_sec=round(elapsed, 2))
+                self.command_repo.update(cmd.id, duration_sec=round(elapsed, 2))
                 last_persist = now
 
             time.sleep(1)
@@ -126,21 +150,21 @@ class CommandEngine:
         if result == ExecutionResult.COMPLETED:
             elapsed = self._get_elapsed(time.time() - (cmd.duration_sec or 0))
 
-            self.repo.update(
+            self.command_repo.update(
             cmd.id,
             status=CommandStatus.COMPLETED,
             completed_at=now,
             duration_sec=round(elapsed, 2),
             )
 
-            self.events.emit("PUMP_COMPLETED", {
+            self.event_emitter.emit("PUMP_COMPLETED", {
             "command_id": cmd.id,
             "sender": cmd.sender_phone,
             "total_runtime_min": round(elapsed / 60),
             })
 
         elif result == ExecutionResult.STOPPED_MANUAL:
-            self.repo.update(
+            self.command_repo.update(
             cmd.id,
             status=CommandStatus.TERMINATED,
             )
@@ -151,34 +175,34 @@ class CommandEngine:
             else "PUMP_ABORTED_MANUAL_STOP"
             )
 
-            self.events.emit(event_type, {
+            self.event_emitter.emit(event_type, {
             "command_id": cmd.id,
             "sender": cmd.sender_phone,
             "ctype": cmd.ctype.value,
             })
 
         elif result == ExecutionResult.POWER_LOSS:
-            self.repo.update(
+            self.command_repo.update(
             cmd.id,
             status=CommandStatus.ABORTED,
             )
 
             remaining = self._get_remaining(cmd, time.time())
 
-            self.events.emit("PUMP_ABORTED_POWER_LOSS", {
+            self.event_emitter.emit("PUMP_ABORTED_POWER_LOSS", {
             "command_id": cmd.id,
             "remaining_min": round(remaining / 60) if remaining else 0,
             "sender": cmd.sender_phone,
             })
 
         elif result == ExecutionResult.ERROR:
-            self.repo.update(
+            self.command_repo.update(
             cmd.id,
             status=CommandStatus.ABORTED,
             completed_at=now,
             )
 
-            self.events.emit("PUMP_ERROR", {
+            self.event_emitter.emit("PUMP_ERROR", {
             "command_id": cmd.id,
             "error": error[:100] if error else "Unknown error",
             "sender": cmd.sender_phone,
@@ -190,7 +214,7 @@ class CommandEngine:
 
     def _mark_running(self, cmd):
 
-        self.repo.update(
+        self.command_repo.update(
             cmd.id,
             status=CommandStatus.RUNNING,
             start_time=datetime.utcnow(),
@@ -198,7 +222,7 @@ class CommandEngine:
 
         mode = "auto" if cmd.ctype == CommandType.AUTO_ON else "manual"
 
-        self.events.emit("PUMP_STARTED", {
+        self.event_emitter.emit("PUMP_STARTED", {
             "command_id": cmd.id,
             "sender": cmd.sender_phone,
             "mode": mode,

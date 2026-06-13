@@ -8,7 +8,10 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     phone = db.Column(db.String(20), unique=True, nullable=False, index=True)
     name = db.Column(db.String(100))
-    email = db.Column(db.String(120))
+    email = db.Column(db.String(120), unique=True, nullable=False)
+
+    #Authentication (for web)
+    password_hash = db.Column(db.String(255), nullable=True)
     
     # Role flags (Django-style)
     is_active = db.Column(db.Boolean, default=True)
@@ -36,4 +39,6 @@ class User(db.Model):
         return cls.query.filter_by(phone=phone, is_active=True).first()
 
     def __repr__(self):
-        return f"<User {self.user.name}"
+        # return f"<User {self.user.name}"
+        return f"<User {self.name}"
+
