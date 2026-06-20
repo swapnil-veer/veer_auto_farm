@@ -5,7 +5,14 @@ from logging_config import logger
 class SIMModem:
     def __init__(self):
         self.sm = gammu.StateMachine()
-        self.sm.ReadConfig()
+        # self.sm.ReadConfig()
+        self.sm.SetConfig(
+            0,
+            {
+                "Device": "/dev/serial0",
+                "Connection": "at9600"
+            }
+        )
         self.connected = False
         self.init()
 
