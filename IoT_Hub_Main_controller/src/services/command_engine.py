@@ -6,19 +6,20 @@ from enum import Enum, auto
 
 from logging_config import logger
 from database.models.command import CommandStatus, CommandType
+from services.pump_context import PumpContextManager
 
 class CommandEngine:
 
     UPDATE_INTERVAL = 5 # seconds (DB write throttle)
 
-    def __init__(self, pump_context_manager, power_service, command_repo, event_emitter):
-        self.pump_ctx = pump_context_manager
+    def __init__(self, pump_service, power_service, command_repo, event_emitter):
+        # self.pump_ctx = pump_context_manager
+        self.pump_service = pump_service
         self.power = power_service
         self.command_repo = command_repo
         self.event_emitter = event_emitter
         self.manual_stop = False
         self.logger = logger
-
 
     def _create_command(
         self,
@@ -28,7 +29,6 @@ class CommandEngine:
         user_id: int | None,
         duration_minutes: int | None = None,
         ):
-        print("in create command")
         self.command_repo.create(
             ctype=ctype,
             sender_phone=sender,
@@ -63,7 +63,8 @@ class CommandEngine:
         try:
             self._mark_running(cmd)
 
-            with self.pump_ctx(cmd_id):
+            with PumpContextManager(self.pump_service, command_id = cmd_id):
+            # with self.pump_ctx(command_id = cmd_id):
                 result = self._run_loop(cmd)
 
             self._handle_result(cmd, result)
@@ -88,7 +89,7 @@ class CommandEngine:
             state = self._get_execution_state(cmd, start_time)
 
             if state == ExecutionState.STOP_MANUAL:
-                return ExecutionResult.STOPPED_MANUAL
+                return ExecutionResult.STOP_MANUAL
 
             if state == ExecutionState.POWER_LOSS:
                 return ExecutionResult.POWER_LOSS
@@ -163,7 +164,7 @@ class CommandEngine:
             "total_runtime_min": round(elapsed / 60),
             })
 
-        elif result == ExecutionResult.STOPPED_MANUAL:
+        elif result == ExecutionResult.STOP_MANUAL:
             self.command_repo.update(
             cmd.id,
             status=CommandStatus.TERMINATED,
@@ -228,7 +229,8 @@ class CommandEngine:
             "mode": mode,
             "duration_min": cmd.remaining_sec // 60 if cmd.remaining_sec else None,
             })
-        
+
+
 class ExecutionState(Enum):
     RUNNING = auto()
     COMPLETED = auto()

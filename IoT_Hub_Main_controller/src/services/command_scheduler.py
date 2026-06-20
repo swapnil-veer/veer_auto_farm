@@ -66,13 +66,16 @@ class CommandScheduler:
         while self._running:
             try:
                 cmd = (
+                self.repo.get_active_command()
+                or
                 self.repo.get_waiting_for_power()
-                or self.repo.get_next_queued()
+                or 
+                self.repo.get_next_queued()
                 )
 
                 if cmd:
-                    logger.info(f"Executing command #{cmd.id}")
-                    self.engine.execute(cmd.id)
+                    logger.info(f"Executing command #{cmd["id"]}")
+                    self.engine.execute(cmd["id"])
                     continue # Immediately check for next command
 
                 # ✅ No work → wait for event OR timeout

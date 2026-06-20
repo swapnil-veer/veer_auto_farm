@@ -122,15 +122,30 @@ class LCDService:
         if not cmd:
             return "PUMP: OFF".ljust(20)
 
-        if cmd.ctype == "AUTO_ON":
+        if cmd["ctype"] == "AUTO_ON":
             return "PUMP: AUTO RUN".ljust(20)
 
         # manual
-        elapsed = time.time() - cmd.start_time.timestamp()
-        remaining = max(0, (cmd.remaining_sec or 0) - elapsed)
+        # print(f"start time : {cmd["start_time"]}")
+        # print(f"start time timestamp : {cmd["start_time"].timestamp()}")
+        # print(f"time.time : {time.time()}")
+        elapsed = time.time() - cmd["start_time"].timestamp()
+        # print(f"elapsed : {elapsed}")
+        remaining = max(0, (cmd["remaining_sec"] or 0) - elapsed)
+        # print(f"remaining : {remaining}")
 
-        mins = int(remaining // 60)
-        secs = int(remaining % 60)
+        # mins = int(remaining // 60)
+        # secs = int(remaining % 60)
+
+        # mins = int(((cmd["remaining_sec"] - cmd["duration_sec"] ) or 0) // 60)
+        # secs = int(((cmd["remaining_sec"] - cmd["duration_sec"] ) or 0) % 60)
+
+        remaining = (cmd["remaining_sec"] - cmd["duration_sec"]) or 0
+
+        rounded = round(remaining / 5) * 5
+
+        mins = rounded // 60
+        secs = rounded % 60
 
         return f"ON {mins:02}:{secs:02}".ljust(20)
 
@@ -141,7 +156,7 @@ class LCDService:
             return ""
             # return "Queue: Empty".ljust(20)
 
-        minutes = (cmd.remaining_sec or 0) // 60
+        minutes = (cmd["remaining_sec"] or 0) // 60
         return f"Next: {minutes} min".ljust(20)
 
     def _build_line4(self):

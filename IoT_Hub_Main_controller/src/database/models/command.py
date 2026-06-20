@@ -53,3 +53,17 @@ class Command(db.Model):
         db.Index('idx_status_priority', 'status', 'priority'),
         db.Index('idx_sender_status', 'sender_phone', 'status'),
     )
+
+    def _to_dict(self):
+        return {
+            "id" : self.id,
+            "ctype" : self.ctype,
+            "user_id" : self.user_id,
+            "sender" : self.sender_phone,
+            "status" : self.status,
+            "duration_sec" : self.duration_sec,
+            "remaining_sec" : self.remaining_sec,
+            "start_time" : self.start_time,
+            "created_at" : self.created_at.isoformat() if self.created_at else None,
+            "completed_at" : self.completed_at.isoformat() if self.completed_at else None,
+        }

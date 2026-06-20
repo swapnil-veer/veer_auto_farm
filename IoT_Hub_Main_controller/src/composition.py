@@ -92,7 +92,7 @@ def compose_application(app):
     # Core services
     # -------------------------
     pump_service = PumpService(pump_gpio, pump_repo, pump_id)
-    pump_context = PumpContextManager(pump_service)
+    # pump_context = PumpContextManager(pump_service)
 
     phase_monitor = PhaseMonitor(
         gpio_reader=phase_gpio,
@@ -131,7 +131,8 @@ def compose_application(app):
     event_emitter = CommandEventEmitter()
 
     command_engine = CommandEngine(
-        pump_context_manager=pump_context,
+        # pump_context_manager=pump_context,
+        pump_service = pump_service,
         power_service=power_service,
         command_repo=command_repo,
         event_emitter=event_emitter,

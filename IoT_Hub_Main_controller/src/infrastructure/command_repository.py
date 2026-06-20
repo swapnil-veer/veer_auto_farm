@@ -23,29 +23,29 @@ class CommandRepository:
 
     def get_active_command(self):
         with self.app.app_context():
-            return (
-            Command.query
-            .filter_by(status=CommandStatus.RUNNING)
-            .first()
-            )
+            cmd = Command.query.filter_by(status=CommandStatus.RUNNING).first()
+            if cmd:
+                return cmd._to_dict()
 
     def get_next_queued(self):
         with self.app.app_context():
-            return (
-            Command.query
-            .filter_by(status=CommandStatus.QUEUED)
+            cmd = (Command.query.filter_by(status=CommandStatus.QUEUED)
             .order_by(Command.priority, Command.created_at)
             .first()
             )
+            if cmd:
+                return cmd._to_dict()
 
     def get_waiting_for_power(self):
         with self.app.app_context():
-            return (
+            cmd = (
             Command.query
             .filter_by(status=CommandStatus.ABORTED)
             .order_by(Command.priority, Command.created_at)
             .first()
             )
+            if cmd:
+                return cmd._to_dict()
 
     def delete(self, cmd_id: int, ):
         with self.app.app_context():
