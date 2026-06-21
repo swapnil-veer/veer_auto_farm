@@ -82,14 +82,17 @@ class CommandEngine:
 
     def _run_loop(self, cmd):
 
+        # remaining = cmd.remaining_sec or 0
+        # last_trick = time.time()
+        base_duration = cmd.duration_sec or 0
         start_time = time.time()
         last_persist = 0
 
         while True:
-            state = self._get_execution_state(cmd, start_time)
+            state = self._get_execution_state(cmd, start_time, base_duration)
 
             if state == ExecutionState.STOP_MANUAL:
-                return ExecutionResult.STOP_MANUAL
+                return ExecutionResult.STOPPED_MANUAL
 
             if state == ExecutionState.POWER_LOSS:
                 return ExecutionResult.POWER_LOSS
@@ -100,7 +103,7 @@ class CommandEngine:
             # Update DB periodically (throttled)
             now = time.time()
             if now - last_persist >= self.UPDATE_INTERVAL:
-                elapsed = self._get_elapsed(start_time)
+                elapsed = self._get_elapsed(start_time, base_duration)
                 self.command_repo.update(cmd.id, duration_sec=round(elapsed, 2))
                 last_persist = now
 
@@ -110,7 +113,7 @@ class CommandEngine:
     # State evaluation
     # --------------------------------------------------
 
-    def _get_execution_state(self, cmd, start_time):
+    def _get_execution_state(self, cmd, start_time, base_duration):
 
         if self.manual_stop:
             return ExecutionState.STOP_MANUAL
@@ -120,7 +123,7 @@ class CommandEngine:
 
         # AUTO mode runs forever
         if cmd.ctype != CommandType.AUTO_ON and cmd.remaining_sec:
-            elapsed = self._get_elapsed(start_time)
+            elapsed = self._get_elapsed(start_time, base_duration)
             if elapsed >= cmd.remaining_sec:
                 return ExecutionState.COMPLETED
 
@@ -130,8 +133,12 @@ class CommandEngine:
     # Time helpers
     # --------------------------------------------------
 
-    def _get_elapsed(self, start_time):
-        return time.time() - start_time
+    def _get_elapsed(self, start_time, base_duration):
+        elapsed = base_duration + (
+            time.time() - start_time
+        )
+        return elapsed
+        # return time.time() - start_time
 
     def _get_remaining(self, cmd, start_time):
         if not cmd.remaining_sec:
