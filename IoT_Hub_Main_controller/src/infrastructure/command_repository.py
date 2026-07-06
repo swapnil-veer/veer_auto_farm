@@ -14,7 +14,8 @@ class CommandRepository:
 
     def get(self, cmd_id: int) -> Command | None:
             with self.app.app_context():
-                return Command.query.get(cmd_id)
+                cmd = Command.query.get(cmd_id)
+                return cmd
 
     def update(self, cmd_id: int, **updates):
         with self.app.app_context():

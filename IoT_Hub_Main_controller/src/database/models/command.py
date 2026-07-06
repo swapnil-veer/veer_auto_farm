@@ -34,8 +34,8 @@ class Command(db.Model):
     
     # Numeric fields
     priority = db.Column(db.Integer, nullable=False)
-    duration_sec = db.Column(db.Float, nullable=True)
-    remaining_sec = db.Column(db.Float, nullable=True)
+    runtime_sec = db.Column(db.Float, nullable=True)
+    target_duration_sec = db.Column(db.Float, nullable=True)
     
     # Boolean + Timestamps
     in_progress = db.Column(db.Boolean, default=False)
@@ -61,8 +61,8 @@ class Command(db.Model):
             "user_id" : self.user_id,
             "sender" : self.sender_phone,
             "status" : self.status,
-            "duration_sec" : self.duration_sec,
-            "remaining_sec" : self.remaining_sec,
+            "runtime_sec" : self.runtime_sec,
+            "target_duration_sec" : self.target_duration_sec,
             "start_time" : self.start_time,
             "created_at" : self.created_at.isoformat() if self.created_at else None,
             "completed_at" : self.completed_at.isoformat() if self.completed_at else None,
