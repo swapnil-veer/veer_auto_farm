@@ -234,7 +234,6 @@ class MainController:
                 )
 
             except Exception as e:
-                print(e)
                 self.sim_service.mark_failed(sms_id)
             
             else:
@@ -245,7 +244,7 @@ class MainController:
                     try:
                         self.sim_service.send_sms(phone=sender, message=reply, rel_sms_id=sms_id)
                     except Exception as e:
-                        print(e)
+                        self.logger.exception(e)
                 self.logger.info(f"SMS {sms_id} processed successfully")
                 
 

@@ -41,7 +41,7 @@ from services.sms_notifier import SMSNotifier
 from services.command_engine import CommandEngine
 from services.command_scheduler import CommandScheduler
 from services.command_events import CommandEventEmitter
-# from services.logging_handler import EventLoggingHandler
+from services.logging_handler import EventLoggingHandler
 from services.lcd_service import LCDService
 
 # Controller
@@ -156,7 +156,7 @@ def compose_application(app):
 
     event_emitter.register(main_controller.handle_event)
     # event_emitter.register(EventLoggingHandler.handle)
-    # event_emitter.register(lcd_service.handle_event)
+    event_emitter.register(lcd_service.handle_event)
 
 
     # -------------------------

@@ -11,7 +11,7 @@ class CommandEventEmitter:
     def register(self, handler):
         self._handlers.append(handler)
 
-    def emit(self, event_type: str, command_id: int, data: dict | None = None):
+    def emit(self, event_type: str, data: dict | None = None):
 
         event = {
         "type": event_type,

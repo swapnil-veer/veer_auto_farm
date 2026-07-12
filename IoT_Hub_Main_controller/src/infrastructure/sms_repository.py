@@ -56,7 +56,7 @@ class SMSRepository:
             phone=phone,
             message=message,
             status=status,
-            error=error,
+            error_info=error,
             related_sms_id=rel_sms_id,
             user_id=user_id,
             )

@@ -127,9 +127,7 @@ class SIMModem:
         }
         # self.sm.SendSMS(msg)
         try:
-            print("in modem send sms try 1")
             self.sm.SendSMS(msg)
-            print("in modem send sms try 2")
             logger.info("SMS sent successfully to %s", number)
             return True
 

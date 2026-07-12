@@ -2,6 +2,7 @@ import time
 import threading
 
 from settings import get_ip_address, get_cpu_temp
+from database.models.command import CommandType
 
 
 class LCDService:
@@ -45,8 +46,7 @@ class LCDService:
     # --------------------------------------------------
 
     def handle_event(self, event):
-
-        event_type = event["event"]
+        event_type = event["type"]
 
         if event_type == "PUMP_STARTED":
             self._set_event("Pump Started")
@@ -63,7 +63,7 @@ class LCDService:
         elif event_type == "SMS_RECEIVED":
             self._set_event("SMS Received")
 
-    def _set_event(self, msg, duration=3):
+    def _set_event(self, msg, duration=10):
         with self.event_lock:
             self.event_message = msg[:20]
             self.event_expiry = time.time() + duration
@@ -121,15 +121,11 @@ class LCDService:
 
         if not cmd:
             return "PUMP: OFF".ljust(20)
-
-        if cmd["ctype"] == "AUTO_ON":
+        if cmd["ctype"] == CommandType.AUTO_ON:
             return "PUMP: AUTO RUN".ljust(20)
-        # elapsed = time.time() - cmd["start_time"].timestamp()
 
-        # remaining = max(0, (cmd["remaining_sec"] or 0) - elapsed)
-
-
-        remaining = (cmd["target_duration_sec"] - cmd["runtime_sec"]) or 0
+        elapsed = max(0, cmd["runtime_sec"] or 0)
+        remaining = (cmd["target_duration_sec"] - elapsed)
 
         rounded = round(remaining / 5) * 5
 
@@ -151,8 +147,13 @@ class LCDService:
     def _build_line4(self):
         # show event first
         with self.event_lock:
-            if self.event_message and time.time() < self.event_expiry:
+            if self.event_message and (time.time() < self.event_expiry):
                 return self.event_message.ljust(20)
+            
+            # Event has expired, clear it
+            self.event_message = None
+            self.event_expiry = 0
+
 
         # fallback system info
         now = time.time()
@@ -160,7 +161,6 @@ class LCDService:
             self._ip = get_ip_address()
             self._cpu = get_cpu_temp()
             self._last_sys_fetch = now
-
         return f"CPU:{self._cpu}".ljust(20)
 
     # --------------------------------------------------

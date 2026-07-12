@@ -61,9 +61,7 @@ class SIMService:
 
     def send_sms(self, phone, message, rel_sms_id=None):
         try:
-            print("in send sms try 1")
             self.modem.send_sms(phone, message)
-            print("in send sms try 2")
         except Exception as e:
             self.sms_repo.log_outgoing(
                 phone=phone,
@@ -73,7 +71,6 @@ class SIMService:
                 rel_sms_id=rel_sms_id
             )
         else:
-            print("in send sms else")
             try:
                 user_id = self.sms_repo.get_user(phone)
                 self.sms_repo.log_outgoing(
@@ -85,7 +82,7 @@ class SIMService:
                     user_id=user_id
                 )
             except Exception as e:
-                print(f"In side send sms {e}")
+                logger.exception(e)
 
 
     def get_authorized_unprocessed(self, limit=5):
