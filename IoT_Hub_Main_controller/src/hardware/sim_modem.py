@@ -14,23 +14,26 @@ class SIMModem:
             }
         )
         self.connected = False
+        self.logger = logger
         self.init()
 
     def init(self):
         try:
             self.sm.Init()
             self.connected = True
-            logger.info("SIM modem connected")
+            self.logger.info("SIM modem connected")
         except Exception as e:
             self.connected = False
-            logger.error(f"SIM init failed: {e}")
+            self.logger.error(f"SIM init failed: {e}")
 
     def check_connection(self) -> bool:
         try:
             self.sm.GetSIMIMSI()
             self.connected = True
+            self.logger.info("SIM modem connection is okay")
         except Exception:
             self.connected = False
+            self.logger.error("SIM connection is failed")
         return self.connected
 
     def get_signal_strength(self):
@@ -55,7 +58,7 @@ class SIMModem:
                 + status.get("TemplatesUsed", 0)
             )
             if remain > 0:
-                logger.info("SMS status fetched successfully. Remaining messages: %s", remain)
+                self.logger.info("SMS status fetched successfully. Remaining messages: %s", remain)
 
             while remain > 0:
                 try:
@@ -69,23 +72,23 @@ class SIMModem:
                         )
 
                     if not cursms:
-                        logger.info("No more SMS returned by device.")
+                        self.logger.info("No more SMS returned by device.")
                         break
 
                     remain -= len(cursms)
                     sms_list.append(cursms)
 
-                    logger.debug(
+                    self.logger.debug(
                         "Fetched %s SMS part(s). Remaining counter: %s",
                         len(cursms),
                         remain
                     )
 
                 except gammu.ERR_EMPTY:
-                    logger.info("SMS storage is empty or no more SMS available.")
+                    self.logger.info("SMS storage is empty or no more SMS available.")
                     break
                 except gammu.GSMError as e:
-                    logger.exception(
+                    self.logger.exception(
                         "Gammu error while reading SMS batch: %s",
                         getattr(e, "Text", str(e))
                     )
@@ -95,20 +98,20 @@ class SIMModem:
                 return []
 
             linked_sms = gammu.LinkSMS(sms_list)
-            logger.info("Successfully linked %s SMS record(s).", len(linked_sms))
+            self.logger.info("Successfully linked %s SMS record(s).", len(linked_sms))
             return linked_sms
 
         except gammu.GSMError as e:
-            logger.exception(
+            self.logger.exception(
                 "Failed to fetch SMS from device: %s",
                 getattr(e, "Text", str(e))
             )
             return []
         except KeyError as e:
-            logger.exception("Unexpected SMS/status structure from Gammu: missing key %s", e)
+            self.logger.exception("Unexpected SMS/status structure from Gammu: missing key %s", e)
             return []
         except Exception:
-            logger.exception("Unexpected error while fetching SMS")
+            self.logger.exception("Unexpected error while fetching SMS")
             return []
     
     def delete_sms(self, folder, location):
@@ -116,7 +119,7 @@ class SIMModem:
             self.sm.DeleteSMS(folder, location)
             return True
         except Exception as e:
-            logger.error(f"Delete failed {folder}:{location}: {e}")
+            self.logger.error(f"Delete failed {folder}:{location}: {e}")
             return False
 
     def send_sms(self, number, text):
@@ -128,11 +131,11 @@ class SIMModem:
         # self.sm.SendSMS(msg)
         try:
             self.sm.SendSMS(msg)
-            logger.info("SMS sent successfully to %s", number)
+            self.logger.info("SMS sent successfully to %s", number)
             return True
 
         except gammu.GSMError as e:
-            logger.exception(
+            self.logger.exception(
                 "Gammu failed to send SMS to %s: %s",
                 number,
                 getattr(e, "Text", str(e))
@@ -140,5 +143,5 @@ class SIMModem:
             raise
 
         except Exception:
-            logger.exception("Unexpected error while sending SMS to %s", number)
+            self.logger.exception("Unexpected error while sending SMS to %s", number)
             raise

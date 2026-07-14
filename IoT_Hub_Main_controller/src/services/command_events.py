@@ -7,6 +7,7 @@ class CommandEventEmitter:
 
     def __init__(self):
         self._handlers = []
+        self.logger = logger
 
     def register(self, handler):
         self._handlers.append(handler)
@@ -23,4 +24,4 @@ class CommandEventEmitter:
             try:
                 handler(event)
             except Exception as exc:
-                logger.exception(f"Event handler failed: {exc}")
+                self.logger.exception(f"Event handler failed: {exc}")

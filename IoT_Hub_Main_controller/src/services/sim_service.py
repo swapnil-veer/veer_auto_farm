@@ -6,16 +6,16 @@ from logging_config import logger
 from database.models.sms_log import SmsLog, SmsStatus
 
 class SIMService:
-    def __init__(self, modem, user_repo, sms_repo, poll_interval=5):
+    def __init__(self, modem, user_repo, sms_repo, poll_interval=60):
         self.modem = modem
         self.user_repo = user_repo
         self.sms_repo = sms_repo
         self.poll_interval = poll_interval
         self.signal = 0
-
-        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread = threading.Thread(name="SIM servise", target=self._loop, daemon=True)
         self._thread.start()
-        logger.info("SIMService started")
+        self.logger = logger
+        self.logger.info("SIMService started")
 
     def get_sim_status(self):
         return self.modem.check_connection
@@ -37,7 +37,6 @@ class SIMService:
         Read SMS > store > mark status > save authorized messages to db 
         """
         raw_messages = self.modem.read_all_sms()
-
         if not self.modem.check_connection():
             return
 
@@ -52,7 +51,7 @@ class SIMService:
             user_id = self.sms_repo.get_user(phone)
 
             if user_id:
-                logger.info(f"SMS received From {phone} AUTHORIZED")
+                self.logger.info(f"SMS received From {phone} AUTHORIZED")
                 self.mark_authorized(sms_id=sms_log["id"], user_id=user_id)
             else:
                 self.mark_unauthorized(sms_id=sms_log["id"])
@@ -82,7 +81,9 @@ class SIMService:
                     user_id=user_id
                 )
             except Exception as e:
-                logger.exception(e)
+                self.logger.exception(e)
+            else:
+                self.logger.info(f"SMS {message} sent to phone {phone}")
 
 
     def get_authorized_unprocessed(self, limit=5):

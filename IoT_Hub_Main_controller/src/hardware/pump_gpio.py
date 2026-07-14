@@ -1,6 +1,5 @@
 # hardware/pump_gpio.py
 # from config import set_high, set_low
-from logging_config import logger
 
 class PumpGPIO:
     def __init__(self, gpio, pin):

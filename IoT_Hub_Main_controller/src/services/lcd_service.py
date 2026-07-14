@@ -3,11 +3,12 @@ import threading
 
 from settings import get_ip_address, get_cpu_temp
 from database.models.command import CommandType
+from logging_config import logger
 
 
 class LCDService:
 
-    def __init__(self,lcd_driver,command_repo,sim_service,power_service,logger,poll_interval=1,):
+    def __init__(self,lcd_driver,command_repo,sim_service,power_service,poll_interval=1,):
         self.lcd = lcd_driver
         self.repo = command_repo
         self.sim_service = sim_service
@@ -36,7 +37,7 @@ class LCDService:
         self.lcd.clear()
 
         # Start background thread
-        self._thread = threading.Thread(target=self._display_loop, daemon=True)
+        self._thread = threading.Thread(name="LCD service", target=self._display_loop, daemon=True)
         self._thread.start()
 
         self.logger.info("LCD service started")

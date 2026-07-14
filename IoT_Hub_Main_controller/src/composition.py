@@ -104,7 +104,7 @@ def compose_application(app):
         modem=sim_modem,
         user_repo=user_repo,
         sms_repo=sms_repo,
-        poll_interval=5,
+        poll_interval=60,
     )
 
     sms_notifier = SMSNotifier(sim_service)
@@ -122,7 +122,6 @@ def compose_application(app):
         command_repo=command_repo,
         sim_service=sim_service,
         power_service=power_service,
-        logger=logger,
     )
 
     # -------------------------
@@ -141,13 +140,20 @@ def compose_application(app):
     scheduler = CommandScheduler(
         engine=command_engine,
         command_repo=command_repo,
-        poll_interval=5,
+        poll_interval=60,
     )
+
+    # -------------------------
+    # Start background workers
+    # -------------------------
+    scheduler.start()
+
 
     # -------------------------
     # Main controller
     # -------------------------
     main_controller = MainController(
+        scheduler=scheduler,
         command_engine=command_engine,
         power_service=power_service,
         sim_service=sim_service,
@@ -158,14 +164,6 @@ def compose_application(app):
     # event_emitter.register(EventLoggingHandler.handle)
     event_emitter.register(lcd_service.handle_event)
 
-
-    # -------------------------
-    # Start background workers
-    # -------------------------
-    threading.Thread(
-        target=scheduler.start,
-        daemon=True
-        ).start()
 
     # sms polling thread
     main_controller.start_sms_polling()

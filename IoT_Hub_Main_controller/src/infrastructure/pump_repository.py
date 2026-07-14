@@ -7,6 +7,7 @@ from logging_config import logger
 class PumpRepository:
     def __init__(self, app):
         self.app = app
+        self.logger = logger
 
     def get_default_pump_id(self) -> int:
         with self.app.app_context():
@@ -37,7 +38,7 @@ class PumpRepository:
         with self.app.app_context():
             run = PumpRun.query.get(run_id)
             if not run:
-                logger.warning(f"No PumpRun {run_id}")
+                self.logger.warning(f"No PumpRun {run_id}")
                 return
             run.off_time = datetime.utcnow()
             run.calculate_duration()

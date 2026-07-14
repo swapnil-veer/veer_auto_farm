@@ -7,10 +7,11 @@ class PumpService:
         self.repo = repository
         self.current_run_id = None
         self.pump_id = pump_id
+        self.logger = logger
 
     def start(self, command_id: int) -> int:
         if self.gpio.is_on():
-            logger.warning("Pump already running")
+            self.logger.warning("Pump already running")
             return self.current_run_id
 
         try:
@@ -29,7 +30,7 @@ class PumpService:
 
         rid = run_id or self.current_run_id
         if not rid:
-            logger.warning("No run ID to stop")
+            self.logger.warning("No run ID to stop")
             return
 
         self.gpio.off()

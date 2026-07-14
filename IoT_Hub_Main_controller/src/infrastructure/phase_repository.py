@@ -6,6 +6,7 @@ from logging_config import logger
 class PhaseRepository:
     def __init__(self, app):
         self.app = app
+        self.logger = logger
 
     def save(self, green: bool, yellow: bool, red: bool, timestamp):
         with self.app.app_context():
@@ -20,4 +21,4 @@ class PhaseRepository:
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
-                logger.exception(f"PhaseLog persist failed: {e}")
+                self.logger.exception(f"PhaseLog persist failed: {e}")

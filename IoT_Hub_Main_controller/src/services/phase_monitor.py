@@ -9,6 +9,7 @@ class PhaseMonitor:
         self.gpio = gpio_reader
         self.repo = repository
         self.poll_interval = poll_interval
+        self.logger = logger
 
         self._state = {
         "green_led": False,
@@ -20,11 +21,12 @@ class PhaseMonitor:
         self._lock = threading.Lock()
 
         self._thread = threading.Thread(
+        name="Phase Monitor",
         target=self._loop, daemon=True
         )
         self._thread.start()
 
-        logger.info("PhaseMonitor started")
+        self.logger.info("PhaseMonitor started")
 
     # ---------- Public API (for MainController / PowerStatusService) ----------
 
@@ -53,7 +55,7 @@ class PhaseMonitor:
                 raw = self.gpio.read()
                 self._handle_sample(raw)
             except Exception as e:
-                logger.exception(f"PhaseMonitor error: {e}")
+                self.logger.exception(f"PhaseMonitor error: {e}")
                 time.sleep(self.poll_interval)
 
     def _handle_sample(self, raw: dict):
@@ -78,7 +80,7 @@ class PhaseMonitor:
             "timestamp": now,
             })
 
-        logger.info(
+        self.logger.info(
             f"Phase change | G={green} Y={yellow} R={red}"
             )
 

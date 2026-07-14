@@ -16,7 +16,8 @@ class MainController:
     - Handles domain events
     """
 
-    def __init__(self, command_engine, power_service, sim_service, notifier, sms_poll_interval=5):
+    def __init__(self, scheduler, command_engine, power_service, sim_service, notifier, sms_poll_interval=5):
+        self.scheduler = scheduler
         self.command_engine = command_engine
         self.power_service = power_service
         self.sim_service = sim_service
@@ -77,6 +78,7 @@ class MainController:
             sms_id,
             user_id,
             )
+            self.scheduler.wakeup()
             return None
 
         # MANUAL ON
@@ -89,6 +91,7 @@ class MainController:
             user_id=user_id,
             duration_minutes=minutes,
             )
+            self.scheduler.wakeup()
             return None
 
         return self._invalid_command_message()
@@ -194,7 +197,7 @@ class MainController:
     # ------------------------------------------------------------------
     def start_sms_polling(self):
         """Start background SMS processing"""
-        self._thread = threading.Thread(target=self._process_loop, daemon=True)
+        self._thread = threading.Thread(name="main controller", target=self._process_loop, daemon=True)
         self._thread.start()
         self.logger.info("SMS polling started")
     
