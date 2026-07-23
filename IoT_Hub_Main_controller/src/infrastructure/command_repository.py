@@ -41,7 +41,18 @@ class CommandRepository:
         with self.app.app_context():
             cmd = (
             Command.query
-            .filter_by(status=CommandStatus.ABORTED)
+            .filter_by(status=CommandStatus.WAITING_FOR_POWER)
+            .order_by(Command.priority, Command.created_at)
+            .first()
+            )
+            if cmd:
+                return cmd._to_dict()
+            
+    def get_waiting_for_water(self):
+        with self.app.app_context():
+            cmd = (
+            Command.query
+            .filter_by(status=CommandStatus.WAITING_FOR_WATER)
             .order_by(Command.priority, Command.created_at)
             .first()
             )
