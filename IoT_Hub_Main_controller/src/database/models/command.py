@@ -17,6 +17,8 @@ class CommandStatus(Enum):
     CREATED = 'created'
     QUEUED = 'queued'
     RUNNING = 'running'
+    WAITING_FOR_POWER = 'waiting_for_power'
+    WAITING_FOR_WATER = 'waiting_for_water'
     COMPLETED = 'completed'
     ABORTED = 'aborted'
     TERMINATED = 'terminated'

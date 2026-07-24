@@ -12,9 +12,11 @@ class CommandScheduler:
     - Falls back to timeout for safety
     """
 
-    def __init__(self, engine, command_repo, poll_interval=30):
+    def __init__(self, engine, command_repo, saftey_lock_repo, saftey_policy_manager, poll_interval=30):
         self.engine = engine
         self.repo = command_repo
+        self.saftey_lock_repo = saftey_lock_repo
+        self.saftey_policy_manager = saftey_policy_manager
         self.poll_interval = poll_interval
         self.logger = logger
 
@@ -66,9 +68,14 @@ class CommandScheduler:
 
     def _run_loop(self):
         while self._running:
+            if self.saftey_lock_repo.is_locked():
+                wait
+                continue
             try:
                 cmd = (
                 self.repo.get_active_command()
+                or
+                self.repo.get_waiting_for_water()
                 or
                 self.repo.get_waiting_for_power()
                 or 
