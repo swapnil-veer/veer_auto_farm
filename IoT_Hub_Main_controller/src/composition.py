@@ -12,6 +12,8 @@ from infrastructure.pump_repository import PumpRepository
 from infrastructure.sms_repository import SMSRepository
 from infrastructure.phase_repository import PhaseRepository
 from infrastructure.user_repository import UserRepository
+from infrastructure.current_reading_repository import CurrentReadingRepository
+from infrastructure.saftey_lock_repository import SafetyLockRepository
 
 # Hardware
 APP_MODE = os.getenv("APP_MODE", "prod")
@@ -22,6 +24,7 @@ if APP_MODE == "local":
     from hardware.mock.mock_sim_modem import MockSIMModem as SIMModem
     from hardware.mock.mock_pump_gpio import MockPumpGPIO as PumpGPIO
     from hardware.mock.mock_phase_gpio import MockPhaseGPIO as PhaseGPIO
+    from hardware.mock.mock_current_sensor import MockCurrentSensor as CurrentSensor
 else:
     from hardware.gpio_rpi import RaspberryPiGPIO
     gpio = RaspberryPiGPIO()
@@ -29,6 +32,7 @@ else:
     from hardware.pump_gpio import PumpGPIO
     from hardware.phase_gpio import PhaseGPIO
     from hardware.lcd_hw import LCDDriver 
+    from hardware.current_sensor import CurrentSensor
 
 
 # Services
@@ -43,6 +47,8 @@ from services.command_scheduler import CommandScheduler
 from services.command_events import CommandEventEmitter
 from services.logging_handler import EventLoggingHandler
 from services.lcd_service import LCDService
+from services.current_monitoring_service import CurrentMonitoringService
+from services.saftey_policy_manager import SafetyPolicyManager
 
 # Controller
 from main_controller import MainController
@@ -77,6 +83,8 @@ def compose_application(app):
     sms_repo = SMSRepository(app)
     phase_repo = PhaseRepository(app)
     user_repo = UserRepository(app)
+    current_repo = CurrentReadingRepository(app)
+    saftey_lock_repo = SafetyLockRepository(app)
 
     # -------------------------
     # Hardware adapters
@@ -87,7 +95,10 @@ def compose_application(app):
     phase_gpio = PhaseGPIO()
     sim_modem = SIMModem()
     lcd_driver = LCDDriver()
+    current_sensor = CurrentSensor()
 
+    # emmitter
+    event_emitter = CommandEventEmitter()
     # -------------------------
     # Core services
     # -------------------------
@@ -114,6 +125,29 @@ def compose_application(app):
     # -------------------------
     power_service = phase_monitor # conforms to is_power_available()
 
+
+
+    # -------------------------
+    # Command orchestration
+    # -------------------------
+    command_engine = CommandEngine(
+        # pump_context_manager=pump_context,
+        pump_service = pump_service,
+        current_sensor=current_sensor,
+        power_service=power_service,
+        command_repo=command_repo,
+        event_emitter=event_emitter,
+    )
+
+    scheduler = CommandScheduler(
+        engine=command_engine,
+        command_repo=command_repo,
+        saftey_lock_repo=saftey_lock_repo,
+        saftey_policy_manager=saftey_policy,
+        current_sensor=current_sensor,
+        poll_interval=60,
+    )
+
     # -------------------------
     # Voluntary Services
     # -------------------------
@@ -124,23 +158,17 @@ def compose_application(app):
         power_service=power_service,
     )
 
-    # -------------------------
-    # Command orchestration
-    # -------------------------
-    event_emitter = CommandEventEmitter()
-
-    command_engine = CommandEngine(
-        # pump_context_manager=pump_context,
-        pump_service = pump_service,
-        power_service=power_service,
-        command_repo=command_repo,
-        event_emitter=event_emitter,
+    current_monitor = CurrentMonitoringService(
+        sensor = current_sensor,
+        current_repo = current_repo,
+        event_emitter = event_emitter,
+          
     )
 
-    scheduler = CommandScheduler(
-        engine=command_engine,
+    saftey_policy = SafetyPolicyManager(
         command_repo=command_repo,
-        poll_interval=60,
+        safety_lock_repo=saftey_lock_repo,
+        event_emitter=event_emitter,
     )
 
     # -------------------------
@@ -163,6 +191,7 @@ def compose_application(app):
     event_emitter.register(main_controller.handle_event)
     # event_emitter.register(EventLoggingHandler.handle)
     event_emitter.register(lcd_service.handle_event)
+    event_emitter.register("DRY_RUN_DETECTED", saftey_policy.ha)
 
 
     # sms polling thread

@@ -17,11 +17,13 @@ class CommandEngine:
     def __init__(
         self,
         pump_service,
+        current_sensor,
         power_service,
         command_repo,
         event_emitter,
     ):
         self.pump_service = pump_service
+        self.current_sensor = current_sensor
         self.power = power_service
         self.command_repo = command_repo
         self.event_emitter = event_emitter

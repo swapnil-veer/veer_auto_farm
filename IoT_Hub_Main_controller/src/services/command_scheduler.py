@@ -3,6 +3,7 @@
 import time
 import threading
 from logging_config import logger
+from datetime import datetime
 
 class CommandScheduler:
     """
@@ -69,7 +70,9 @@ class CommandScheduler:
     def _run_loop(self):
         while self._running:
             if self.saftey_lock_repo.is_locked():
-                wait
+                self.logger.info("Execution blocked by saftey Lock")
+                self._wakeup_event.wait(timeout=self.poll_interval)
+                self._wakeup_event.clear()
                 continue
             try:
                 cmd = (
@@ -98,3 +101,14 @@ class CommandScheduler:
             except Exception as exc:
                 self.logger.exception(f"Scheduler loop error: {exc}")
                 time.sleep(self.poll_interval) # Prevent tight error loop
+
+    def _process_expired_locks(self):
+        lock = self.saftey_lock_repo.get_active_lock()
+
+        if not lock:
+            return
+
+        if lock.valid_until <= datetime.utcnow:
+            self.logger.info(f"Saftey lock expired: {lock.lock_type}")
+            self.saftey_policy_manager.handle_lock_expired(lock)
+            self.wakeup()

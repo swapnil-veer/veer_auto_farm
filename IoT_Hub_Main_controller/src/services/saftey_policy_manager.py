@@ -22,6 +22,14 @@ class SafetyPolicyManager:
         self.safety_lock_repo = safety_lock_repo
         self.event_emitter = event_emitter
 
+    def handle_event(self, event):
+        etype = event["type"]
+        data_dict = event["data"]
+        command_id = data_dict["command_id"]
+
+        if etype == "DRY_RUN_DETECTED":
+            self.handle_dry_run(command_id=command_id)
+
     def handle_dry_run(
         self,
         command_id:int,

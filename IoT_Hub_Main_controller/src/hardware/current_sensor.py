@@ -1,3 +1,3 @@
-class CurrentSnsor:
+class CurrentSensor:
     def read_amp(self):
-        pass
+        raise NotImplementedError
