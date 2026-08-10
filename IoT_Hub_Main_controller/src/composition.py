@@ -32,7 +32,9 @@ else:
     from hardware.pump_gpio import PumpGPIO
     from hardware.phase_gpio import PhaseGPIO
     from hardware.lcd_hw import LCDDriver 
-    from hardware.current_sensor import CurrentSensor
+    # from hardware.current_sensor import CurrentSensor
+    from hardware.mock.mock_current_sensor import MockCurrentSensor as CurrentSensor
+
 
 
 # Services
@@ -49,6 +51,7 @@ from services.logging_handler import EventLoggingHandler
 from services.lcd_service import LCDService
 from services.current_monitoring_service import CurrentMonitoringService
 from services.saftey_policy_manager import SafetyPolicyManager
+from services.system_state import SystemState
 
 # Controller
 from main_controller import MainController
@@ -95,13 +98,16 @@ def compose_application(app):
     phase_gpio = PhaseGPIO()
     sim_modem = SIMModem()
     lcd_driver = LCDDriver()
-    current_sensor = CurrentSensor()
+    current_sensor = CurrentSensor(readings = [
+        11,12,17,18,29
+    ])
 
     # emmitter
     event_emitter = CommandEventEmitter()
     # -------------------------
     # Core services
     # -------------------------
+    system_state = SystemState()
     pump_service = PumpService(pump_gpio, pump_repo, pump_id)
     # pump_context = PumpContextManager(pump_service)
 
@@ -125,38 +131,9 @@ def compose_application(app):
     # -------------------------
     power_service = phase_monitor # conforms to is_power_available()
 
-
-
-    # -------------------------
-    # Command orchestration
-    # -------------------------
-    command_engine = CommandEngine(
-        # pump_context_manager=pump_context,
-        pump_service = pump_service,
-        current_sensor=current_sensor,
-        power_service=power_service,
-        command_repo=command_repo,
-        event_emitter=event_emitter,
-    )
-
-    scheduler = CommandScheduler(
-        engine=command_engine,
-        command_repo=command_repo,
-        saftey_lock_repo=saftey_lock_repo,
-        saftey_policy_manager=saftey_policy,
-        current_sensor=current_sensor,
-        poll_interval=60,
-    )
-
     # -------------------------
     # Voluntary Services
     # -------------------------
-    lcd_service = LCDService(
-        lcd_driver=lcd_driver,
-        command_repo=command_repo,
-        sim_service=sim_service,
-        power_service=power_service,
-    )
 
     current_monitor = CurrentMonitoringService(
         sensor = current_sensor,
@@ -170,6 +147,39 @@ def compose_application(app):
         safety_lock_repo=saftey_lock_repo,
         event_emitter=event_emitter,
     )
+
+    # -------------------------
+    # Command orchestration
+    # -------------------------
+    command_engine = CommandEngine(
+        # pump_context_manager=pump_context,
+        pump_service = pump_service,
+        current_monitor=current_monitor,
+        power_service=power_service,
+        command_repo=command_repo,
+        event_emitter=event_emitter,
+    )
+
+    scheduler = CommandScheduler(
+        engine=command_engine,
+        command_repo=command_repo,
+        saftey_lock_repo=saftey_lock_repo,
+        saftey_policy_manager=saftey_policy,
+        poll_interval=60,
+    )
+
+    # -------------------------
+    # Voluntary Services
+    # -------------------------
+    lcd_service = LCDService(
+        lcd_driver=lcd_driver,
+        command_repo=command_repo,
+        sim_service=sim_service,
+        power_service=power_service,
+        system_state=system_state,
+    )
+
+
 
     # -------------------------
     # Start background workers
@@ -186,12 +196,14 @@ def compose_application(app):
         power_service=power_service,
         sim_service=sim_service,
         notifier=sms_notifier,
+        system_state=system_state,
     )
 
+    event_emitter.register(system_state.handle_event)
     event_emitter.register(main_controller.handle_event)
     # event_emitter.register(EventLoggingHandler.handle)
     event_emitter.register(lcd_service.handle_event)
-    event_emitter.register("DRY_RUN_DETECTED", saftey_policy.ha)
+    event_emitter.register(saftey_policy.handle_event)
 
 
     # sms polling thread

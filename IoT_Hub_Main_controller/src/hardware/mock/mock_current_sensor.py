@@ -1,7 +1,7 @@
 
 class MockCurrentSensor:
-    def __init__(self):
-        self.readings = self.readings
+    def __init__(self, readings):
+        self.readings = readings
         self.index = 0
 
     def read_amp(self) :

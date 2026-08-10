@@ -70,23 +70,15 @@ class CurrentMonitoringService:
         samples = []
 
         for _ in range(
-            self.RAW_SAMPLE_COUNT
-        ):
+            self.RAW_SAMPLE_COUNT):
 
-            samples.append(
-                self.sensor.read_amp()
-            )
+            samples.append(self.sensor.read_amp())
 
             time.sleep(0.2)
 
         avg_current = mean(samples)
 
-        self.current_repo.save(
-            avg_current_amp=round(
-                avg_current,
-                2,
-            )
-        )
+        self.current_repo.save(reading_amp=round(avg_current,2,))
 
         return avg_current
 
@@ -102,9 +94,7 @@ class CurrentMonitoringService:
 
             self._check_dry_run()
 
-            time.sleep(
-                self.SAMPLE_INTERVAL_SEC
-            )
+            time.sleep(self.SAMPLE_INTERVAL_SEC)
 
     # ----------------------------------
     # Dry Run Detection
@@ -112,41 +102,26 @@ class CurrentMonitoringService:
 
     def _check_dry_run(self):
 
-        snapshots = (
-            self.current_repo.get_last_n(
-                self.DRY_RUN_WINDOWS
-            )
-        )
+        snapshots = (self.current_repo.get_last_n(self.DRY_RUN_WINDOWS))
 
-        if (
-            len(snapshots)
-            < self.DRY_RUN_WINDOWS
-        ):
+        if (len(snapshots)< self.DRY_RUN_WINDOWS):
             return
 
         below_threshold = all(
-            snapshot.avg_current_amp
+            snapshot.reading_amp
             <= self.DRY_RUN_THRESHOLD_AMP
             for snapshot in snapshots
         )
 
         if below_threshold:
 
-            avg_current = mean(
-                [
-                    s.avg_current_amp
-                    for s in snapshots
-                ]
-            )
+            avg_current = mean([s.reading_amp for s in snapshots])
 
             self.event_emitter.emit(
                 "DRY_RUN_DETECTED",
                 {
                     "command_id": self._command_id,
-                    "current_amp": round(
-                        avg_current,
-                        2,
-                    ),
+                    "current_amp": round(avg_current,2,),
                 },
             )
 
@@ -154,42 +129,23 @@ class CurrentMonitoringService:
     # Motor Stop Verification
     # ----------------------------------
 
-    def verify_motor_stopped(
-        self,
-        command_id:int,
-    ):
+    def verify_motor_stopped(self,command_id:int):
 
-        time.sleep(
-            self.MOTOR_STOP_DELAY_SEC
-        )
+        time.sleep(self.MOTOR_STOP_DELAY_SEC)
 
         samples = []
 
-        for _ in range(
-            self.RAW_SAMPLE_COUNT
-        ):
-
-            samples.append(
-                self.sensor.read_amp()
-            )
-
+        for _ in range(self.RAW_SAMPLE_COUNT):
+            samples.append(self.sensor.read_amp())
             time.sleep(0.2)
 
         avg_current = mean(samples)
 
-        if (
-            avg_current
-            <= self.MOTOR_STOP_THRESHOLD_AMP
-        ):
-
-            self.event_emitter.emit(
-                "MOTOR_STOP_VERIFIED",
+        if (avg_current<= self.MOTOR_STOP_THRESHOLD_AMP):
+            self.event_emitter.emit("MOTOR_STOP_VERIFIED",
                 {
                     "command_id": command_id,
-                    "current_amp": round(
-                        avg_current,
-                        2,
-                    ),
+                    "current_amp": round(avg_current,2,),
                 },
             )
 
@@ -199,11 +155,7 @@ class CurrentMonitoringService:
             "MOTOR_STOP_FAILURE",
             {
                 "command_id": command_id,
-                "current_amp": round(
-                    avg_current,
-                    2,
-                ),
+                "current_amp": round(avg_current,2,),
             },
         )
-
         return False

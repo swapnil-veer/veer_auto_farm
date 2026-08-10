@@ -8,11 +8,12 @@ from logging_config import logger
 
 class LCDService:
 
-    def __init__(self,lcd_driver,command_repo,sim_service,power_service,poll_interval=1,):
+    def __init__(self,lcd_driver,command_repo,sim_service,power_service, system_state, poll_interval=1,):
         self.lcd = lcd_driver
         self.repo = command_repo
         self.sim_service = sim_service
         self.power = power_service
+        self.system_state = system_state
         self.logger = logger
         self.poll_interval = poll_interval
 
@@ -114,8 +115,12 @@ class LCDService:
         return self.repo.get_next_queued()
 
     def _build_line1(self):
-        power_ok = self.power.is_power_available()
+        # power_ok = self.power.is_power_available()
+        # return f"{self._signal_text()}PWR:{'ON' if power_ok else 'OFF'}".ljust(20)
+        status = self.system_state.snapshot()
+        power_ok = status["power_available"]
         return f"{self._signal_text()}PWR:{'ON' if power_ok else 'OFF'}".ljust(20)
+
 
     def _build_line2(self):
         cmd = self._get_active_command()

@@ -17,13 +17,13 @@ class CommandEngine:
     def __init__(
         self,
         pump_service,
-        current_sensor,
+        current_monitor,
         power_service,
         command_repo,
         event_emitter,
     ):
         self.pump_service = pump_service
-        self.current_sensor = current_sensor
+        self.current_monitor = current_monitor
         self.power = power_service
         self.command_repo = command_repo
         self.event_emitter = event_emitter
@@ -72,6 +72,7 @@ class CommandEngine:
 
             with PumpContextManager(
                 self.pump_service,
+                self.current_monitor,
                 command_id=cmd_id,
             ):
                 result, runtime = self._run_loop(cmd)

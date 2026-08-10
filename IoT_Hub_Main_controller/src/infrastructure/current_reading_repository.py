@@ -3,8 +3,8 @@ from database.models.current_reading import CurrentReading
 
 
 class CurrentReadingRepository:
-    def __init__(self):
-        self.app = self.app
+    def __init__(self, app):
+        self.app = app
 
     def save(self, reading_amp:float):
         with self.app.app_context():

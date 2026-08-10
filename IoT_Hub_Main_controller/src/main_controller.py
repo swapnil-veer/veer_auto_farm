@@ -16,12 +16,13 @@ class MainController:
     - Handles domain events
     """
 
-    def __init__(self, scheduler, command_engine, power_service, sim_service, notifier, sms_poll_interval=5):
+    def __init__(self, scheduler, command_engine, power_service, sim_service, notifier, system_state, sms_poll_interval=5):
         self.scheduler = scheduler
         self.command_engine = command_engine
         self.power_service = power_service
         self.sim_service = sim_service
         self.notifier = notifier
+        self.system_state = system_state
         self.logger = logger
         self._stop_event = threading.Event()
         self._thread = None
@@ -104,12 +105,16 @@ class MainController:
         """
         Build SMS-friendly system status text.
         """
-        power_on = self.power_service.is_power_available()
-        signal = self.sim_service.get_signal_strength()
-        sim_ok = self.sim_service.get_sim_status()
+        # power_on = self.power_service.is_power_available()
+        # signal = self.sim_service.get_signal_strength()
+        # sim_ok = self.sim_service.get_sim_status()
+        status = self.system_state.snapshot()
 
-        power_txt = "ON" if power_on else "OFF"
-        signal_txt = f"{signal}%" if sim_ok else "NO SIM"
+        # power_txt = "ON" if power_on else "OFF"
+        # signal_txt = f"{signal}%" if sim_ok else "NO SIM"
+        
+        power_txt = "ON" if status["power_available"] == True else "OFF"
+        signal_txt = status["signal_strength"]
 
         return f"PWR:{power_txt}, SIG:{signal_txt}"
 
