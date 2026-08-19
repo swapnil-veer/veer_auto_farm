@@ -54,11 +54,12 @@ class ApplicationContext:
     Holds references to all long-lived services.
     Useful for startup, shutdown, and diagnostics.
     """
-    def __init__(self, app, scheduler, sim_service, phase_monitor):
+    def __init__(self, app, scheduler, sim_service, phase_monitor, system_state):
         self.app = app
         self.scheduler = scheduler
         self.sim_service = sim_service
         self.phase_monitor = phase_monitor
+        self.system_state = system_state
 
 def compose_application(app):
     """
@@ -91,9 +92,7 @@ def compose_application(app):
     phase_gpio = PhaseGPIO()
     sim_modem = SIMModem()
     lcd_driver = LCDDriver()
-    current_sensor = CurrentSensor([
-        11,12,17,18,29
-    ])
+    current_sensor = CurrentSensor()
 
     # emmitter
     event_emitter = CommandEventEmitter()
@@ -209,4 +208,5 @@ def compose_application(app):
         scheduler=scheduler,
         sim_service=sim_service,
         phase_monitor=phase_monitor,
+        system_state=system_state,
         )

@@ -6,6 +6,9 @@ import os
 from dotenv import load_dotenv
 # from database.database import init_db, db
 
+from .web.routes.home_routes import home_bp
+from .web.routes.dev_routes import dev_bp
+
 load_dotenv()
 
 db = SQLAlchemy()
@@ -13,7 +16,7 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder="web/templates")
     
     # Config
     basedir = os.path.abspath(os.path.dirname(__file__))
@@ -30,8 +33,15 @@ def create_app():
     
     # Initialize database using YOUR database.py method
     # init_db(app)
+
+    app.register_blueprint(home_bp)
+    app.register_blueprint(dev_bp)
     
     @app.route('/')
     def health():
         return {'status': 'healthy', 'db': 'veer_farm.db ready'}
+
+    @app.route("/")
+    def home():
+        return "Veer Auto Farm"
     return app

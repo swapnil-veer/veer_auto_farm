@@ -20,7 +20,6 @@ from composition import compose_application
 
 def main():
     app = create_app()
-
  # -----------------------------
  # Infrastructure bootstrap
  # -----------------------------
@@ -34,43 +33,14 @@ def main():
  # Compose + start application
  # -----------------------------
     ctx = compose_application(app)
+
+    # app.ctx = ctx
+    app.extensions["ctx"] = ctx
+
+    
     logger.info("System started successfully")
 
-    # from database.models import User
-    # user = User (phone = "+917038835527", name = "Swapnil", email = "veerswapnil00@gmail.com", is_owner = True, is_superuser = True)
-    # with app.app_context():
-    #     db.session.add(user)
-    #     db.session.commit()
-
-    sms_repo = SMSRepository(app)
-
-    def fake_sms(phone, message):
-        sms_log = sms_repo.log_incoming(phone, message)
-        user_id = sms_repo.get_user(phone)
-
-        if user_id:
-            logger.info(f"Fake SMS received From {phone} AUTHORIZED")
-            fields = {
-                "status": SmsStatus.AUTHORIZED,
-                "is_authorized": True,
-                "processed_at" : datetime.utcnow(),
-            }
-
-            if user_id is not None:
-                fields["user_id"] = user_id
-
-            sms_repo.update_sms(
-                sms_id=sms_log["id"],
-                **fields
-            )
-        else:
-            print("Not authorized")
-
-    i = 0
-    if i == 0:
-        fake_sms(phone = "+917038835527", message = "ON 2")
-        i = 1
-
+    app.run(debug=True, host='0.0.0.0', port=5000)
 
     try:
         while True:
@@ -81,34 +51,4 @@ def main():
         # cleanup_gpio()
 
 if __name__ == "__main__":
-    import threading
-    import time
-
-    def monitor_threads():
-        while True:
-            print(f"\nAlive Threads: {len(threading.enumerate())}")
-            for t in threading.enumerate():
-                # print(f"""
-                # Name      : {t.name}
-                # Ident     : {t.ident}
-                # Native ID : {t.native_id}
-                # Daemon    : {t.daemon}
-                # Alive     : {t.is_alive()}
-                # Class     : {type(t).__name__}
-                # Target    : {getattr(t, "_target", None)}
-                # Args      : {getattr(t, "_args", None)}
-                # """)
-                # print("=" * 60)
-                print("Thread:", t)
-                # print("Type:", type(t))
-                # print("Module:", type(t).__module__)
-                # print("Class:", type(t).__name__)
-                
-            time.sleep(60)
-
-    threading.Thread(
-        target=monitor_threads,
-        name="ThreadMonitor",
-        daemon=True,
-    ).start()
     main()

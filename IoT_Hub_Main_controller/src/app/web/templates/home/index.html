@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2>System Status</h2>
+
+<div class="card">
+    <p>Power: {{ state.power_available }}</p>
+    <p>Pump Running: {{ state.pump_running }}</p>
+    <p>Signal: {{ state.signal_strength }}</p>
+    <p>Active Command: {{ state.active_command_type }}</p>
+    <p>Safety Lock: {{ state.safety_lock }}</p>
+    <p>Last Event: {{ state.last_event }}</p>
+</div>
+
+{% endblock %}
