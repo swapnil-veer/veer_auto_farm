@@ -20,14 +20,14 @@ APP_MODE = os.getenv("APP_MODE", "prod")
 
 from hardware.hardware_provider import HardwareProvider
 
-provider = HardwareProvider(APP_MODE)
+# provider = HardwareProvider(APP_MODE)
 
-gpio = provider.get_gpio()
-SIMModem = provider.get_sim
-PumpGPIO = provider.get_pump_gpio
-PhaseGPIO = provider.get_phase_gpio
-CurrentSensor = provider.get_current_sensor
-LCDDriver = provider.get_lcd
+# gpio = provider.get_gpio()
+# SIMModem = provider.get_sim
+# PumpGPIO = provider.get_pump_gpio
+# PhaseGPIO = provider.get_phase_gpio
+# CurrentSensor = provider.get_current_sensor
+# LCDDriver = provider.get_lcd
 
 
 # Services
@@ -54,12 +54,17 @@ class ApplicationContext:
     Holds references to all long-lived services.
     Useful for startup, shutdown, and diagnostics.
     """
-    def __init__(self, app, scheduler, sim_service, phase_monitor, system_state):
+    def __init__(self, app, scheduler, sim_service, phase_monitor, system_state, pump_gpio, phase_gpio, sim_modem, lcd_driver, current_sensor):
         self.app = app
         self.scheduler = scheduler
         self.sim_service = sim_service
         self.phase_monitor = phase_monitor
         self.system_state = system_state
+        self.pump_gpio = pump_gpio
+        self.phase_gpio = phase_gpio 
+        self.sim_modem = sim_modem
+        self.lcd_driver  = lcd_driver 
+        self.current_sensor = current_sensor
 
 def compose_application(app):
     """
@@ -70,6 +75,11 @@ def compose_application(app):
     """
 
     logger.info("Composing application services...")
+
+    # Initiate the hardware provider
+    provider = HardwareProvider(os.getenv("APP_MODE", "prod"))
+
+    gpio = provider.get_gpio()
     
     setup_gpio_runtime(app, gpio)
     # -------------------------
@@ -86,13 +96,16 @@ def compose_application(app):
     # -------------------------
     # Hardware adapters
     # -------------------------
+    
+
     pump_id = pump_repo.get_default_pump_id()
     pump_pin = pump_repo.get_pump_gpio_pin(pump_id)
-    pump_gpio = PumpGPIO(gpio, pump_pin)
-    phase_gpio = PhaseGPIO()
-    sim_modem = SIMModem()
-    lcd_driver = LCDDriver()
-    current_sensor = CurrentSensor()
+
+    pump_gpio = provider.get_pump_gpio(gpio, pump_pin)
+    phase_gpio = provider.get_phase_gpio()
+    sim_modem = provider.get_sim()
+    lcd_driver = provider.get_lcd()
+    current_sensor = provider.get_current_sensor()
 
     # emmitter
     event_emitter = CommandEventEmitter()
@@ -209,4 +222,9 @@ def compose_application(app):
         sim_service=sim_service,
         phase_monitor=phase_monitor,
         system_state=system_state,
+        pump_gpio = pump_gpio, 
+        phase_gpio = phase_gpio, 
+        sim_modem = sim_modem, 
+        lcd_driver  = lcd_driver, 
+        current_sensor = current_sensor,
         )

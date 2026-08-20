@@ -35,10 +35,7 @@ class HardwareProvider:
         return SIMModem()
 
     def get_pump_gpio(self, *args):
-        print("in get pump gpio")
         if self.mode == "SIMULATOR":
-            print("in get pump gpio 2")
-
             return MockPumpGPIO
         return PumpGPIO(*args)
 

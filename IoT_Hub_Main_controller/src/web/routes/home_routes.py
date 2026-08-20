@@ -7,8 +7,7 @@ home_bp = Blueprint("home", __name__)
 def home():
 
     # state = current_app.ctx.system_state
-    state = current_app.extensions["ctx"].system_state
-
+    state = current_app.extensions["ctx"].system_state.snapshot()
 
     return render_template(
         "home/index.html",

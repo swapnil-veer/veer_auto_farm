@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h2>Hardware Simulator</h2>
+
+<div class="card">
+
+    <h3>Motor Status</h3>
+
+    {% if motor_running %}
+        <div class="motor-on">
+            🟢 MOTOR RUNNING
+        </div>
+    {% else %}
+        <div class="motor-off">
+            🔴 MOTOR OFF
+        </div>
+    {% endif %}
+
+</div>
+
+
+<div class="card">
+
+    <h3>LCD Preview (20x4)</h3>
+
+    <div class="lcd">
+
+        <div>{{ lcd_lines.get(1, "") }}</div>
+        <div>{{ lcd_lines.get(2, "") }}</div>
+        <div>{{ lcd_lines.get(3, "") }}</div>
+        <div>{{ lcd_lines.get(4, "") }}</div>
+
+    </div>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Current Simulator</h3>
+
+    /dev/current/normal
+        <button>Normal Current</button>
+    </form>
+
+    /dev/current/dry_run
+        <button>Dry Run Current</button>
+    </form>
+
+    /dev/current/motor_stopped
+        <button>Motor Stopped</button>
+    </form>
+
+    /dev/current/stop_failure
+        <button>Motor Stop Failure</button>
+    </form>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Power Simulator</h3>
+
+    /dev/power/on
+        <button>Power ON</button>
+    </form>
+
+    /dev/power/off
+        <button>Power OFF</button>
+    </form>
+
+</div>
+
+{% endblock %}

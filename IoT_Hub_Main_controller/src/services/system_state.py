@@ -1,5 +1,6 @@
 from threading import Lock
 from copy import deepcopy
+from logging_config import logger
 
 
 class SystemState:
@@ -32,6 +33,7 @@ class SystemState:
             self._state.update(kwargs)
 
     def handle_event(self, event: dict):
+        logger.debug(f"system state received : {event}")
 
         etype = event.get("type")
         data = event.get("data", {})
