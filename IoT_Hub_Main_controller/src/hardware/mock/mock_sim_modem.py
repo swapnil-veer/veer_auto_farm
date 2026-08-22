@@ -10,7 +10,7 @@ class MockSIMModem:
     def get_signal_strength(self):
         return self._signal
 
-    def read_sms(self):
+    def read_all_sms(self):
         """
         Return fake SMS batches.
         Format matches gammu.LinkSMS output shape.

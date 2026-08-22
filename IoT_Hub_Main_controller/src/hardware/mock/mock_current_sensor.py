@@ -1,12 +1,28 @@
 
 class MockCurrentSensor:
-    def __init__(self, readings):
-        self.readings = readings
-        self.index = 0
+    NORMAL = "normal"
+    DRY_RUN = "dry_run"
+    MOTOR_STOPPED = "motor_stopped"
+    STOP_FAILURE = "stop_failure"
 
-    def read_amp(self) :
-        if not self.readings:
-            return 0
-        value = self.readings[min(self.index, len(self.readings)-1)]
-        self.index += 1
-        return float(value)
+    def __init__(self):
+        self.mode = self.NORMAL
+
+    def set_mode(self, mode):
+        self.mode = mode
+
+    def read_current(self):
+
+        if self.mode == self.NORMAL:
+            return 11.5
+
+        if self.mode == self.DRY_RUN:
+            return 2.0
+
+        if self.mode == self.MOTOR_STOPPED:
+            return 0.0
+
+        if self.mode == self.STOP_FAILURE:
+            return 4.5
+
+        return 0.0

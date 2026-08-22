@@ -18,23 +18,16 @@ from infrastructure.saftey_lock_repository import SafetyLockRepository
 # Hardware
 APP_MODE = os.getenv("APP_MODE", "prod")
 
-if APP_MODE == "local":
-    from hardware.mock.mock_gpio import MockGPIO
-    gpio = MockGPIO()
-    from hardware.mock.mock_sim_modem import MockSIMModem as SIMModem
-    from hardware.mock.mock_pump_gpio import MockPumpGPIO as PumpGPIO
-    from hardware.mock.mock_phase_gpio import MockPhaseGPIO as PhaseGPIO
-    from hardware.mock.mock_current_sensor import MockCurrentSensor as CurrentSensor
-else:
-    from hardware.gpio_rpi import RaspberryPiGPIO
-    gpio = RaspberryPiGPIO()
-    from hardware.sim_modem import SIMModem
-    from hardware.pump_gpio import PumpGPIO
-    from hardware.phase_gpio import PhaseGPIO
-    from hardware.lcd_hw import LCDDriver 
-    # from hardware.current_sensor import CurrentSensor
-    from hardware.mock.mock_current_sensor import MockCurrentSensor as CurrentSensor
+from hardware.hardware_provider import HardwareProvider
 
+provider = HardwareProvider(APP_MODE)
+
+gpio = provider.get_gpio()
+SIMModem = provider.get_sim
+PumpGPIO = provider.get_pump_gpio
+PhaseGPIO = provider.get_phase_gpio
+CurrentSensor = provider.get_current_sensor
+LCDDriver = provider.get_lcd
 
 
 # Services
@@ -61,11 +54,12 @@ class ApplicationContext:
     Holds references to all long-lived services.
     Useful for startup, shutdown, and diagnostics.
     """
-    def __init__(self, app, scheduler, sim_service, phase_monitor):
+    def __init__(self, app, scheduler, sim_service, phase_monitor, system_state):
         self.app = app
         self.scheduler = scheduler
         self.sim_service = sim_service
         self.phase_monitor = phase_monitor
+        self.system_state = system_state
 
 def compose_application(app):
     """
@@ -98,9 +92,7 @@ def compose_application(app):
     phase_gpio = PhaseGPIO()
     sim_modem = SIMModem()
     lcd_driver = LCDDriver()
-    current_sensor = CurrentSensor(readings = [
-        11,12,17,18,29
-    ])
+    current_sensor = CurrentSensor()
 
     # emmitter
     event_emitter = CommandEventEmitter()
@@ -216,4 +208,5 @@ def compose_application(app):
         scheduler=scheduler,
         sim_service=sim_service,
         phase_monitor=phase_monitor,
+        system_state=system_state,
         )
