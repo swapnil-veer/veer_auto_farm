@@ -15,6 +15,7 @@ class MockSIMModem:
         Return fake SMS batches.
         Format matches gammu.LinkSMS output shape.
         """
+        print("in read sms ")
         msgs = list(self._inbox)
         self._inbox.clear()
         return [[{
@@ -31,5 +32,5 @@ class MockSIMModem:
         print(f"[MOCK SMS → {phone}]: {text}")
 
     # helper for tests
-    def inject_sms(self, text):
-        self._inbox.append(text)
+    def inject_sms(self, dct:dict):
+        self._inbox.append(dct)

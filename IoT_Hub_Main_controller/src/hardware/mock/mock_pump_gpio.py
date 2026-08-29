@@ -1,5 +1,7 @@
 class MockPumpGPIO:
     def __init__(self, gpio, pin=None):
+        self.gpio = gpio
+        self.pin = pin
         self.state = False
 
     def on(self):

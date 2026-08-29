@@ -27,10 +27,10 @@
 
     <div class="lcd">
 
-        <div>{{ lcd_lines.get(1, "") }}</div>
-        <div>{{ lcd_lines.get(2, "") }}</div>
-        <div>{{ lcd_lines.get(3, "") }}</div>
-        <div>{{ lcd_lines.get(4, "") }}</div>
+        <div class="lcd-line">{{ lcd_lines.get(0, "") }}</div>
+        <div class="lcd-line">{{ lcd_lines.get(1, "") }}</div>
+        <div class="lcd-line">{{ lcd_lines.get(2, "") }}</div>
+        <div class="lcd-line">{{ lcd_lines.get(3, "") }}</div>
 
     </div>
 
@@ -41,37 +41,64 @@
 
     <h3>Current Simulator</h3>
 
-    /dev/current/normal
-        <button>Normal Current</button>
-    </form>
+    /dev/current-mode
+    <form action="/dev/current-mode" method="POST">
+        <label>
+            <input
+                type="radio"
+                name="mode"
+                value="normal"
+                {% if current_mode == "normal" %}checked{% endif %}
+            >
+            Normal Current
+        </label>
 
-    /dev/current/dry_run
-        <button>Dry Run Current</button>
-    </form>
+        <br><br>
 
-    /dev/current/motor_stopped
-        <button>Motor Stopped</button>
-    </form>
+        <label>
+            <input
+                type="radio"
+                name="mode"
+                value="dry_run"
+                {% if current_mode == "dry_run" %}checked{% endif %}
+            >
+            Dry Run Current
+        </label>
 
-    /dev/current/stop_failure
-        <button>Motor Stop Failure</button>
+        <br><br>
+
+        <button type="submit">
+            Apply
+        </button>
+
     </form>
 
 </div>
 
 
 <div class="card">
+    <h3>Phase Monitor</h3>
 
-    <h3>Power Simulator</h3>
+    <form action="/dev/power-mode" method="POST">
+        <label>
+            <input type="radio" name="power" value="on"
+                   {% if power_available %}checked{% endif %}>
+            Power Available
+        </label>
 
-    /dev/power/on
-        <button>Power ON</button>
+        <br><br>
+
+        <label>
+            <input type="radio" name="power" value="off"
+                   {% if not power_available %}checked{% endif %}>
+            Power Lost
+        </label>
+
+        <br><br>
+
+        <button type="submit">Apply</button>
     </form>
-
-    /dev/power/off
-        <button>Power OFF</button>
-    </form>
-
 </div>
+
 
 {% endblock %}

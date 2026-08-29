@@ -54,13 +54,14 @@ class ApplicationContext:
     Holds references to all long-lived services.
     Useful for startup, shutdown, and diagnostics.
     """
-    def __init__(self, app, scheduler, sim_service, phase_monitor, system_state, pump_gpio, phase_gpio, sim_modem, lcd_driver, current_sensor):
+    def __init__(self, app, scheduler, sim_service, phase_monitor, system_state, pump_service, 
+                 phase_gpio, sim_modem, lcd_driver, current_sensor,):
         self.app = app
         self.scheduler = scheduler
         self.sim_service = sim_service
         self.phase_monitor = phase_monitor
         self.system_state = system_state
-        self.pump_gpio = pump_gpio
+        self.pump_service = pump_service
         self.phase_gpio = phase_gpio 
         self.sim_modem = sim_modem
         self.lcd_driver  = lcd_driver 
@@ -116,9 +117,13 @@ def compose_application(app):
     pump_service = PumpService(pump_gpio, pump_repo, pump_id)
     # pump_context = PumpContextManager(pump_service)
 
+    event_emitter.register(system_state.handle_event)
+
+
     phase_monitor = PhaseMonitor(
         gpio_reader=phase_gpio,
         repository=phase_repo, 
+        event_emitter = event_emitter,
         poll_interval=1,
     )
 
@@ -126,6 +131,7 @@ def compose_application(app):
         modem=sim_modem,
         user_repo=user_repo,
         sms_repo=sms_repo,
+        event_emitter=event_emitter,
         poll_interval=60,
     )
 
@@ -186,6 +192,7 @@ def compose_application(app):
 
 
 
+
     # -------------------------
     # Start background workers
     # -------------------------
@@ -204,7 +211,7 @@ def compose_application(app):
         system_state=system_state,
     )
 
-    event_emitter.register(system_state.handle_event)
+    # event_emitter.register(system_state.handle_event)
     event_emitter.register(main_controller.handle_event)
     # event_emitter.register(EventLoggingHandler.handle)
     event_emitter.register(lcd_service.handle_event)
@@ -222,7 +229,7 @@ def compose_application(app):
         sim_service=sim_service,
         phase_monitor=phase_monitor,
         system_state=system_state,
-        pump_gpio = pump_gpio, 
+        pump_service = pump_service, 
         phase_gpio = phase_gpio, 
         sim_modem = sim_modem, 
         lcd_driver  = lcd_driver, 

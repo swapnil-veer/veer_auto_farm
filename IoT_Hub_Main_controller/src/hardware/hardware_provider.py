@@ -36,7 +36,7 @@ class HardwareProvider:
 
     def get_pump_gpio(self, *args):
         if self.mode == "SIMULATOR":
-            return MockPumpGPIO
+            return MockPumpGPIO(*args)
         return PumpGPIO(*args)
 
     def get_phase_gpio(self):

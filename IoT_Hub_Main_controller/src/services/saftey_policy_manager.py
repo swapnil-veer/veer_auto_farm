@@ -23,11 +23,11 @@ class SafetyPolicyManager:
         self.event_emitter = event_emitter
 
     def handle_event(self, event):
-        etype = event["type"]
-        data_dict = event["data"]
-        command_id = data_dict["command_id"]
+        etype = event.get("type")
+        data = event.get("data", {})
 
         if etype == "DRY_RUN_DETECTED":
+            command_id = data["command_id"]
             self.handle_dry_run(command_id=command_id)
 
     def handle_dry_run(

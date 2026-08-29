@@ -11,6 +11,9 @@ class MockCurrentSensor:
     def set_mode(self, mode):
         self.mode = mode
 
+    def get_mode(self):
+        return self.mode
+
     def read_current(self):
 
         if self.mode == self.NORMAL:

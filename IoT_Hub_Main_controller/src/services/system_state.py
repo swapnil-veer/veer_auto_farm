@@ -19,6 +19,7 @@ class SystemState:
             "pump_running": False,
             "pump_mode": None,
             "active_command_id": None,
+            "sim_status" : None,
             "signal_strength": None,
             "safety_lock": None,
             "last_event": None,
@@ -68,3 +69,9 @@ class SystemState:
 
             elif etype == "DRY_RUN_RECOVERED":
                 self._state["safety_lock"] = None
+
+            elif etype == "SIM_STATUS":
+                self._state["sim_status"] = data["sim_status"]
+                
+            elif etype == "SIGNAL_STRENGTH":
+                self._state["signal_strength"] = data["signal_strength"]

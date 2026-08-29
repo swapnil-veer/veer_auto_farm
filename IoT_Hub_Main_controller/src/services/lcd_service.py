@@ -96,8 +96,8 @@ class LCDService:
         self.last_signal_bars = bars
 
     def _signal_text(self):
-        if not self.sim_service.get_sim_status():
-            return "NO SIM ".ljust(7)
+        # if not self.sim_service.get_sim_status():
+        #     return "NO SIM ".ljust(7)
 
         strength = self.sim_service.get_signal_strength()
         self._update_signal_chars(strength)

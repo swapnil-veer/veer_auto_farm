@@ -2,10 +2,10 @@ class MockLCD:
 
     def __init__(self):
         self.lines = {
+            0: "",
             1: "",
             2: "",
-            3: "",
-            4: ""
+            3: ""
         }
         self.custom_chars = {}
 

@@ -6,10 +6,11 @@ from logging_config import logger
 from database.models.sms_log import SmsLog, SmsStatus
 
 class SIMService:
-    def __init__(self, modem, user_repo, sms_repo, poll_interval=60):
+    def __init__(self, modem, user_repo, sms_repo, event_emitter, poll_interval=60):
         self.modem = modem
         self.user_repo = user_repo
         self.sms_repo = sms_repo
+        self.event_emitter = event_emitter
         self.poll_interval = poll_interval
         self.signal = 0
         self._thread = threading.Thread(name="SIM servise", target=self._loop, daemon=True)
@@ -18,7 +19,13 @@ class SIMService:
         self.logger.info("SIMService started")
 
     def get_sim_status(self):
-        return self.modem.check_connection
+        if self.modem.check_connection:
+            status = True
+        else:
+            status = False
+        self.event_emitter.emit(event_type  = "SIM_STATUS", data = {"sim_status" : status})
+        return status
+
 
     def get_signal_strength(self):
         return self.signal
@@ -41,6 +48,7 @@ class SIMService:
             return
 
         self.signal = self.modem.get_signal_strength() or 0
+        self.event_emitter.emit(event_type  = "SIGNAL_STRENGTH", data = {"signal_strength" : self.signal})
 
         for sms_list in raw_messages:
             sms = sms_list[0]
