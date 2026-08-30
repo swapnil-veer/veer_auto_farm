@@ -21,15 +21,20 @@ class PhaseMonitor:
 
         self._lock = threading.Lock()
 
-        self._thread = threading.Thread(
-        name="Phase Monitor",
-        target=self._loop, daemon=True
-        )
+        self._running = False
+        self._thread = None
+
+    # ---------- Public API (for MainController / PowerStatusService) ----------
+
+    def start(self):
+        if self._running:
+            return
+
+        self._running = True
+        self._thread = threading.Thread(name="Phase Monitor",target=self._loop, daemon=True )
         self._thread.start()
 
         self.logger.info("PhaseMonitor started")
-
-    # ---------- Public API (for MainController / PowerStatusService) ----------
 
     def is_power_available(self) -> bool:
         with self._lock:

@@ -15,7 +15,6 @@ class MockSIMModem:
         Return fake SMS batches.
         Format matches gammu.LinkSMS output shape.
         """
-        print("in read sms ")
         msgs = list(self._inbox)
         self._inbox.clear()
         return [[{

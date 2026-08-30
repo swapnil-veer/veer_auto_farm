@@ -146,7 +146,7 @@ class MainController:
         sender = data.get("sender")
 
         if not sender:
-            self.logger.info(f"Event received: {etype}")
+            # self.logger.info(f"Event received: {etype}")
             return
 
         dispatch = {

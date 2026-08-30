@@ -13,26 +13,65 @@ class SIMService:
         self.event_emitter = event_emitter
         self.poll_interval = poll_interval
         self.signal = 0
+        self.sim_status = None
+
+        self.logger = logger
+
+
+        self._running = False
+        self._thread = None
+
+    def start(self):
+        if self._running:
+            return
+
+        self._running = True
         self._thread = threading.Thread(name="SIM servise", target=self._loop, daemon=True)
         self._thread.start()
-        self.logger = logger
+
         self.logger.info("SIMService started")
 
-    def get_sim_status(self):
-        if self.modem.check_connection:
-            status = True
-        else:
-            status = False
+    def set_sim_status(self, status:bool):
+        if self.sim_status == status:
+            return
+
+        self.sim_status = status
         self.event_emitter.emit(event_type  = "SIM_STATUS", data = {"sim_status" : status})
-        return status
+    
+
+    def get_sim_status(self):
+        return self.sim_status
+
+    def set_signal_strength(self, signal):
+        if self.signal == signal:
+            return
+        self.signal = signal
+        self.event_emitter.emit(event_type  = "SIGNAL_STRENGTH", data = {"signal_strength" : signal})
 
 
     def get_signal_strength(self):
         return self.signal
 
+    def _check_connection(self):
+        sim_status = self.modem.check_connection()
+        self.set_sim_status(sim_status)
+
+    def _check_signal(self):
+        signal = self.modem.get_signal_strength() or 0
+        self.set_signal_strength(signal)
+
     def _loop(self):
         while True:
-            self.sync_incoming_sms()
+            try:
+                self._check_connection()
+                self._check_signal()
+
+                # Only process SMS if connected
+                if self.sim_status:
+                    self.sync_incoming_sms()
+            except Exception as e:
+                self.logger.exception(f"SIMService loop error: {e}")
+
             time.sleep(self.poll_interval)
 
 # --------------------------------------------------------------------------
@@ -44,11 +83,6 @@ class SIMService:
         Read SMS > store > mark status > save authorized messages to db 
         """
         raw_messages = self.modem.read_all_sms()
-        if not self.modem.check_connection():
-            return
-
-        self.signal = self.modem.get_signal_strength() or 0
-        self.event_emitter.emit(event_type  = "SIGNAL_STRENGTH", data = {"signal_strength" : self.signal})
 
         for sms_list in raw_messages:
             sms = sms_list[0]

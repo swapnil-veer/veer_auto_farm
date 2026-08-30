@@ -20,12 +20,14 @@ class CommandEngine:
         current_monitor,
         power_service,
         command_repo,
+        system_state,
         event_emitter,
     ):
         self.pump_service = pump_service
         self.current_monitor = current_monitor
         self.power = power_service
         self.command_repo = command_repo
+        self.system_state = system_state
         self.event_emitter = event_emitter
         self.manual_stop = False
         self.logger = logger
@@ -55,6 +57,7 @@ class CommandEngine:
             # runtime_sec=duration_minutes * 60 if duration_minutes else None,
             target_duration_sec=duration_minutes * 60 if duration_minutes else None,
         )
+        self._update_next_command_state()
 
     def request_manual_stop(self):
         self.manual_stop = True
@@ -173,6 +176,7 @@ class CommandEngine:
                 )
 
                 last_persist = now
+                self._update_active_command_state()     #It updates system state
 
             time.sleep(1)
 
@@ -262,7 +266,7 @@ class CommandEngine:
 
             self.command_repo.update(
                 cmd.id,
-                status=CommandStatus.ABORTED,
+                status=CommandStatus.WAITING_FOR_POWER,
                 runtime_sec=round(runtime, 2),
             )
 
@@ -306,6 +310,8 @@ class CommandEngine:
                     "sender": cmd.sender_phone,
                 },
             )
+        self._update_active_command_state()     #It updates system state
+        self._update_next_command_state()       #It updates system state
 
     # --------------------------------------------------
     # Transition To Running
@@ -318,6 +324,8 @@ class CommandEngine:
             status=CommandStatus.RUNNING,
             start_time=datetime.utcnow(),
         )
+        self._update_active_command_state()     #It updates system state
+        self._update_next_command_state()       #It updates system state
 
         mode = (
             "auto"
@@ -338,6 +346,34 @@ class CommandEngine:
                 ),
             },
         )
+
+    def _update_active_command_state(self):
+        current_cmd = self.command_repo.get_active_command()
+
+        if not current_cmd:
+            self.system_state.clear_current_command()
+            return
+
+        self.system_state.set_active_command(
+            command_id = current_cmd["id"],
+            command_mode = current_cmd["ctype"],
+            runtime_sec = current_cmd["runtime_sec"],
+            target_duration_sec = current_cmd["target_duration_sec"]
+        )
+
+    def _update_next_command_state(self):
+        next_cmd = self.command_repo.get_next_queued()
+
+        if not next_cmd:
+
+            self.system_state.clear_next_command()
+            return
+
+        self.system_state.set_next_command(
+            command_id=next_cmd["id"],
+            command_mode=next_cmd["ctype"],
+        )
+
 
 
 class ExecutionState(Enum):

@@ -110,14 +110,15 @@ def compose_application(app):
 
     # emmitter
     event_emitter = CommandEventEmitter()
+
     # -------------------------
     # Core services
     # -------------------------
+    event_logger = EventLoggingHandler()
     system_state = SystemState()
     pump_service = PumpService(pump_gpio, pump_repo, pump_id)
     # pump_context = PumpContextManager(pump_service)
 
-    event_emitter.register(system_state.handle_event)
 
 
     phase_monitor = PhaseMonitor(
@@ -126,6 +127,10 @@ def compose_application(app):
         event_emitter = event_emitter,
         poll_interval=1,
     )
+    # -------------------------
+    # Power abstraction
+    # -------------------------
+    power_service = phase_monitor # conforms to is_power_available()
 
     sim_service = SIMService(
         modem=sim_modem,
@@ -137,10 +142,7 @@ def compose_application(app):
 
     sms_notifier = SMSNotifier(sim_service)
   
-    # -------------------------
-    # Power abstraction
-    # -------------------------
-    power_service = phase_monitor # conforms to is_power_available()
+
 
     # -------------------------
     # Voluntary Services
@@ -168,6 +170,7 @@ def compose_application(app):
         current_monitor=current_monitor,
         power_service=power_service,
         command_repo=command_repo,
+        system_state = system_state,
         event_emitter=event_emitter,
     )
 
@@ -184,18 +187,20 @@ def compose_application(app):
     # -------------------------
     lcd_service = LCDService(
         lcd_driver=lcd_driver,
-        command_repo=command_repo,
-        sim_service=sim_service,
-        power_service=power_service,
         system_state=system_state,
     )
 
-
-
+    event_emitter.register(system_state.handle_event)
+    event_emitter.register(event_logger.handle_event)
+    event_emitter.register(lcd_service.handle_event)
+    event_emitter.register(saftey_policy.handle_event)
 
     # -------------------------
     # Start background workers
     # -------------------------
+    lcd_service.start()
+    power_service.start()
+    sim_service.start()
     scheduler.start()
 
 
@@ -213,9 +218,7 @@ def compose_application(app):
 
     # event_emitter.register(system_state.handle_event)
     event_emitter.register(main_controller.handle_event)
-    # event_emitter.register(EventLoggingHandler.handle)
-    event_emitter.register(lcd_service.handle_event)
-    event_emitter.register(saftey_policy.handle_event)
+
 
 
     # sms polling thread

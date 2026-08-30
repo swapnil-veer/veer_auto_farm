@@ -8,11 +8,8 @@ from logging_config import logger
 
 class LCDService:
 
-    def __init__(self,lcd_driver,command_repo,sim_service,power_service, system_state, poll_interval=1,):
+    def __init__(self,lcd_driver, system_state, poll_interval=1,):
         self.lcd = lcd_driver
-        self.repo = command_repo
-        self.sim_service = sim_service
-        self.power = power_service
         self.system_state = system_state
         self.logger = logger
         self.poll_interval = poll_interval
@@ -31,17 +28,26 @@ class LCDService:
         self._ip = ""
         self._cpu = ""
 
+        self._running = False
+        self._thread = None
+
         # Boot screen
         self.lcd.clear()
         self.lcd.write_line(0, "VEER AUTO-FARM".center(20))
         time.sleep(10)
         self.lcd.clear()
+        self.lcd.write_line(0, "Initializing...!".center(20))
+        
 
-        # Start background thread
+    def start(self):
+        if self._running:
+            return
+        
         self._thread = threading.Thread(name="LCD service", target=self._display_loop, daemon=True)
         self._thread.start()
 
         self.logger.info("LCD service started")
+
 
     # --------------------------------------------------
     # EVENT HANDLER (event-driven UI)
@@ -95,12 +101,13 @@ class LCDService:
         self.lcd.create_char(2, pat[1])
         self.last_signal_bars = bars
 
-    def _signal_text(self):
-        # if not self.sim_service.get_sim_status():
-        #     return "NO SIM ".ljust(7)
+    def _signal_text(self, status):
+        sim_status = status.get("sim_status")
+        signal_strength = status.get("signal_strength")
+        if not sim_status:
+            return "NO SIM ".ljust(7)
 
-        strength = self.sim_service.get_signal_strength()
-        self._update_signal_chars(strength)
+        self._update_signal_chars(strength= signal_strength)
 
         return (chr(0) + chr(1) + chr(2)).ljust(7)
 
@@ -114,24 +121,23 @@ class LCDService:
     def _get_next_command(self):
         return self.repo.get_next_queued()
 
-    def _build_line1(self):
-        # power_ok = self.power.is_power_available()
-        # return f"{self._signal_text()}PWR:{'ON' if power_ok else 'OFF'}".ljust(20)
-        status = self.system_state.snapshot()
-        power_ok = status["power_available"]
-        return f"{self._signal_text()}PWR:{'ON' if power_ok else 'OFF'}".ljust(20)
+    def _build_line1(self, state):
+        power_ok = state["power_available"]
+        return f"{self._signal_text(state)}PWR:{'ON' if power_ok else 'OFF'}".ljust(20)
 
 
-    def _build_line2(self):
-        cmd = self._get_active_command()
+    def _build_line2(self, state):
+        cmd = state.get("active_command_id")
+        mode = state.get("active_command_mode")
+        runtime_sec = max(0, state.get("runtime_sec") or 0)
+        target_duration_sec = max(0, state.get("target_duration_sec") or 0)
 
         if not cmd:
             return "PUMP: OFF".ljust(20)
-        if cmd["ctype"] == CommandType.AUTO_ON:
+        if mode == CommandType.AUTO_ON:
             return "PUMP: AUTO RUN".ljust(20)
 
-        elapsed = max(0, cmd["runtime_sec"] or 0)
-        remaining = (cmd["target_duration_sec"] - elapsed)
+        remaining = (target_duration_sec - runtime_sec)
 
         rounded = round(remaining / 5) * 5
 
@@ -140,15 +146,10 @@ class LCDService:
 
         return f"ON {mins:02}:{secs:02}".ljust(20)
 
-    def _build_line3(self):
-        cmd = self._get_next_command()
+    def _build_line3(self, state):
+        next_command_id = state.get("next_command_id")
 
-        if not cmd:
-            return ""
-            # return "Queue: Empty".ljust(20)
-
-        minutes = (cmd["target_duration_sec"] or 0) // 60
-        return f"Next: {minutes} min".ljust(20)
+        return f"Next: {next_command_id}".ljust(20)
 
     def _build_line4(self):
         # show event first
@@ -183,10 +184,11 @@ class LCDService:
             self._stop_event.wait(self.poll_interval)
 
     def _render(self):
+        state = self.system_state.snapshot()
         lines = [
-            self._build_line1(),
-            self._build_line2(),
-            self._build_line3(),
+            self._build_line1(state),
+            self._build_line2(state),
+            self._build_line3(state),
             self._build_line4(),
         ]
         for i in range(4):

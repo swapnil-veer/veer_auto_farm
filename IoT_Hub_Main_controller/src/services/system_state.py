@@ -23,6 +23,14 @@ class SystemState:
             "signal_strength": None,
             "safety_lock": None,
             "last_event": None,
+
+            "active_command_id":None,
+            "active_command_mode":None,
+            "runtime_sec": None,
+            "target_duration_sec": None,
+
+            "next_command_id" : None,
+            "next_command_mode" : None,
         }
 
     def snapshot(self):
@@ -75,3 +83,36 @@ class SystemState:
                 
             elif etype == "SIGNAL_STRENGTH":
                 self._state["signal_strength"] = data["signal_strength"]
+
+    def set_active_command(
+        self,
+        command_id,
+        command_mode,
+        runtime_sec,
+        target_duration_sec,
+        ):
+        self._state["active_command_id"] = command_id
+        self._state["active_command_mode"] = command_mode
+        self._state["runtime_sec"] = runtime_sec
+        self._state["target_duration_sec"] = target_duration_sec
+
+
+    def clear_current_command(self):
+        self._state["active_command_id"] = None
+        self._state["active_command_mode"] = None
+        self._state["runtime_sec"] = None
+        self._state["target_duration_sec"] = None
+
+    def set_next_command(
+        self,
+        command_id,
+        command_mode,
+        ):
+        self._state["next_command_id"] = command_id
+        self._state["next_command_mode"] = command_mode
+
+
+    def clear_next_command(self):
+        self._state["next_command_id"] = None
+        self._state["next_command_mode"] = None
+
