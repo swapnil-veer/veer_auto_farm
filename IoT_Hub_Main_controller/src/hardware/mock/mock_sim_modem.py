@@ -17,6 +17,7 @@ class MockSIMModem:
         """
         msgs = list(self._inbox)
         self._inbox.clear()
+        return[[msg]for i, msg in enumerate(msgs)]
         return [[{
             "Number": "+911234567890",
             "Text": msg,
@@ -31,5 +32,11 @@ class MockSIMModem:
         print(f"[MOCK SMS → {phone}]: {text}")
 
     # helper for tests
-    def inject_sms(self, dct:dict):
+    def inject_sms(self, phone, message):
+        dct = {
+            "Number": phone,
+            "Text": message,
+            "Folder": 0,
+            "Location": 1
+            }
         self._inbox.append(dct)

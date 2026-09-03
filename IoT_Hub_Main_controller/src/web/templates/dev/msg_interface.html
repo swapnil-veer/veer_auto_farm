@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h2>SMS Simulator</h2>
+
+
+<div class="card">
+
+    <form method="get">
+
+        <label>
+            User Selection
+        </label>
+
+        <select
+            class="full-width"
+            name="phone"
+            onchange="this.form.submit()">
+
+            {% for user in users %}
+
+                <option
+                    value="{{ user.phone }}"
+                    {% if user.phone == selected_phone %}
+                    selected
+                    {% endif %}
+                >
+                    {{ user.name }}
+                    ({{ user.phone }})
+                </option>
+
+            {% endfor %}
+
+        </select>
+
+    </form>
+
+</div>
+
+
+<div class="msg-container">
+
+    <div class="msg-box">
+
+        <h3>Received</h3>
+
+        {% for msg in incoming %}
+
+            <div class="msg-item">
+
+                <strong>
+                    {{ msg.created_at }}
+                </strong>
+
+                <br>
+
+                {{ msg.message }}
+
+            </div>
+
+        {% endfor %}
+
+    </div>
+
+
+    <div class="msg-box">
+
+        <h3>Sent Messages</h3>
+
+        {% for msg in outgoing %}
+
+            <div class="msg-item">
+
+                <strong>
+                    {{ msg.created_at }}
+                </strong>
+
+                <br>
+
+                {{ msg.message }}
+
+            </div>
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+
+
+<div class="card">
+
+    <form action="/dev/msg_interface/send" method="post">
+        <input
+            type="hidden"
+            name="phone"
+            value="{{ selected_phone }}"
+        >
+
+        <input
+            class="message-input"
+            type="text"
+            name="message"
+            placeholder="Type Message"
+            required
+        >
+
+        <button type="submit">
+            Send
+        </button>
+
+    </form>
+
+</div>
+
+
+<div class="card">
+
+    <h4>Quick Commands</h4>
+
+    <form action="/dev/msg_interface/send" method="post">
+        <input type="hidden" name="phone" value="{{ selected_phone }}">
+        <input type="hidden" name="message" value="STATUS">
+        <button>STATUS</button>
+    </form>
+
+    <form action="/dev/msg_interface/send" method="post">
+        <input type="hidden" name="phone" value="{{ selected_phone }}">
+        <input type="hidden" name="message" value="AUTO">
+        <button>AUTO</button>
+    </form>
+
+    <form action="/dev/msg_interface/send" method="post">
+        <input type="hidden" name="phone" value="{{ selected_phone }}">
+        <input type="hidden" name="message" value="ON 30">
+        <button>ON 30</button>
+    </form>
+
+    <form action="/dev/msg_interface/send" method="post">
+        <input type="hidden" name="phone" value="{{ selected_phone }}">
+        <input type="hidden" name="message" value="OFF">
+        <button>OFF</button>
+    </form>
+
+</div>
+
+{% endblock %}

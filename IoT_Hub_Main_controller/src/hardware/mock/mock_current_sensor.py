@@ -14,7 +14,7 @@ class MockCurrentSensor:
     def get_mode(self):
         return self.mode
 
-    def read_current(self):
+    def read_amp(self):
 
         if self.mode == self.NORMAL:
             return 11.5

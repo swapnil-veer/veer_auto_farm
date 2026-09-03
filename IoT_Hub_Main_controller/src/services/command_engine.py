@@ -69,22 +69,24 @@ class CommandEngine:
         if not cmd:
             return
 
+        runtime = cmd.runtime_sec or 0
+
         try:
 
-            self._mark_running(cmd)
+            if not self.power.is_power_available():
 
-            with PumpContextManager(
-                self.pump_service,
-                self.current_monitor,
-                command_id=cmd_id,
-            ):
-                result, runtime = self._run_loop(cmd)
+                result = ExecutionResult.POWER_LOSS
 
-            self._handle_result(
-                cmd,
-                result,
-                runtime=runtime,
-            )
+            else:
+
+                self._mark_running(cmd)
+
+                with PumpContextManager(
+                    self.pump_service,
+                    self.current_monitor,
+                    command_id=cmd_id,
+                ):
+                    result, runtime = self._run_loop(cmd)
 
         except Exception as exc:
 
@@ -96,10 +98,19 @@ class CommandEngine:
                 cmd,
                 ExecutionResult.ERROR,
                 error=str(exc),
-                runtime=cmd.runtime_sec or 0,
+                runtime=runtime,
+            )
+
+        else:
+
+            self._handle_result(
+                cmd,
+                result,
+                runtime=runtime,
             )
 
         finally:
+
             self.manual_stop = False
 
     # --------------------------------------------------

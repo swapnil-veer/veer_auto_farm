@@ -55,7 +55,8 @@ class ApplicationContext:
     Useful for startup, shutdown, and diagnostics.
     """
     def __init__(self, app, scheduler, sim_service, phase_monitor, system_state, pump_service, 
-                 phase_gpio, sim_modem, lcd_driver, current_sensor,):
+                 phase_gpio, sim_modem, lcd_driver, current_sensor,
+                 sms_repo,):
         self.app = app
         self.scheduler = scheduler
         self.sim_service = sim_service
@@ -66,6 +67,8 @@ class ApplicationContext:
         self.sim_modem = sim_modem
         self.lcd_driver  = lcd_driver 
         self.current_sensor = current_sensor
+
+        self.sms_repo = sms_repo
 
 def compose_application(app):
     """
@@ -237,4 +240,6 @@ def compose_application(app):
         sim_modem = sim_modem, 
         lcd_driver  = lcd_driver, 
         current_sensor = current_sensor,
+
+        sms_repo=sms_repo,
         )

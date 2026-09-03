@@ -1,4 +1,4 @@
-from app import create_app
+from app import create_app, db
 
 from web.routes_registry import register_routes
 
@@ -19,6 +19,11 @@ bootstrap_database(app)
 
 ctx = start_application(app)
 
+# from database.models import User
+# user = User (phone = "+917038835527", name = "Swapnil", email = "veerswapnil00@gmail.com", is_owner = True, is_superuser = True)
+# with app.app_context():
+#     db.session.add(user)
+#     db.session.commit()
 
 if __name__ == "__main__":
 
