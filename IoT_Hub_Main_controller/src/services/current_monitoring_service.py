@@ -21,10 +21,12 @@ class CurrentMonitoringService:
         self,
         sensor,
         current_repo,
+        saftey_policy_manager,
         event_emitter,
     ):
         self.sensor = sensor
         self.current_repo = current_repo
+        self.saftey_policy_manager = saftey_policy_manager
         self.event_emitter = event_emitter
 
         self._running = False
@@ -73,12 +75,16 @@ class CurrentMonitoringService:
             self.RAW_SAMPLE_COUNT):
 
             samples.append(self.sensor.read_amp())
+            print(f"sample : {samples}")
 
             time.sleep(0.2)
 
         avg_current = mean(samples)
+        print(f"avg current : {round(avg_current,2,)}")
 
-        self.current_repo.save(reading_amp=round(avg_current,2,))
+        # self.current_repo.save(reading_amp=round(avg_current,2,))
+        self.current_repo.save(reading_amp=0)
+
 
         return avg_current
 
@@ -101,29 +107,28 @@ class CurrentMonitoringService:
     # ----------------------------------
 
     def _check_dry_run(self):
-
+        print("check dry run")
         snapshots = (self.current_repo.get_last_n(self.DRY_RUN_WINDOWS))
 
         if (len(snapshots)< self.DRY_RUN_WINDOWS):
             return
+        print("above threshold")
 
         below_threshold = all(
             snapshot.reading_amp
             <= self.DRY_RUN_THRESHOLD_AMP
             for snapshot in snapshots
         )
-
+        for snap in snapshots:
+            print(f"snapshots : {snap}")
+            print(f"reading amp :  {snap.reading_amp}")
+            print(self.DRY_RUN_THRESHOLD_AMP)
         if below_threshold:
 
             avg_current = mean([s.reading_amp for s in snapshots])
+            print("in below")
+            self.saftey_policy_manager.handle_dry_run()
 
-            self.event_emitter.emit(
-                "DRY_RUN_DETECTED",
-                {
-                    "command_id": self._command_id,
-                    "current_amp": round(avg_current,2,),
-                },
-            )
 
     # ----------------------------------
     # Motor Stop Verification

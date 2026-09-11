@@ -7,6 +7,7 @@ from app import db
 class SafetyLockType(str, Enum):
     DRY_RUN = "DRY_RUN"
     DAILY_LOCK = "DAILY_LOCK"
+    POWER = "POWER"
 
 
 class SafetyLockStatus(str, Enum):
@@ -22,7 +23,7 @@ class SafetyLock(db.Model):
     lock_type = db.Column(db.String(50),nullable=False)
     status = db.Column(db.String(20),nullable=False,default=SafetyLockStatus.ACTIVE.value)
     retry_count = db.Column(db.Integer,nullable=False,default=0)
-    valid_until = db.Column(db.DateTime,nullable=False)
+    valid_until = db.Column(db.DateTime,nullable=True)
     reason = db.Column(db.String(255))
     created_at = db.Column(db.DateTime,nullable=False,default=datetime.utcnow)
     released_at = db.Column(db.DateTime)

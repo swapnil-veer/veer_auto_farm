@@ -13,10 +13,9 @@ class CommandScheduler:
     - Falls back to timeout for safety
     """
 
-    def __init__(self, engine, command_repo, saftey_lock_repo, saftey_policy_manager, poll_interval=30):
+    def __init__(self, engine, command_repo, saftey_policy_manager, poll_interval=30):
         self.engine = engine
         self.repo = command_repo
-        self.saftey_lock_repo = saftey_lock_repo
         self.saftey_policy_manager = saftey_policy_manager
         self.poll_interval = poll_interval
         self.logger = logger
@@ -69,10 +68,9 @@ class CommandScheduler:
 
     def _run_loop(self):
         while self._running:
-            if self.saftey_lock_repo.is_locked():
+            if not self.saftey_policy_manager.can_execute():
                 self.logger.info("Execution blocked by saftey Lock")
-                self._wakeup_event.wait(timeout=self.poll_interval)
-                self._wakeup_event.clear()
+                time.sleep(self.poll_interval)
                 continue
             try:
                 cmd = (

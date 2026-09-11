@@ -18,15 +18,15 @@ class CommandEngine:
         self,
         pump_service,
         current_monitor,
-        power_service,
         command_repo,
+        saftey_policy_manager,
         system_state,
         event_emitter,
     ):
         self.pump_service = pump_service
         self.current_monitor = current_monitor
-        self.power = power_service
         self.command_repo = command_repo
+        self.saftey_policy_manager = saftey_policy_manager
         self.system_state = system_state
         self.event_emitter = event_emitter
         self.manual_stop = False
@@ -65,7 +65,6 @@ class CommandEngine:
     def execute(self, cmd_id: int):
 
         cmd = self.command_repo.get(cmd_id)
-
         if not cmd:
             return
 
@@ -73,7 +72,7 @@ class CommandEngine:
 
         try:
 
-            if not self.power.is_power_available():
+            if self.saftey_policy_manager.is_power_locked():
 
                 result = ExecutionResult.POWER_LOSS
 
@@ -154,6 +153,12 @@ class CommandEngine:
                     ExecutionResult.STOP_MANUAL,
                     total_runtime,
                 )
+            
+            if state == ExecutionState.DRY_RUN:
+                return (
+                    ExecutionResult.DRY_RUN,
+                    total_runtime,
+                )
 
             if state == ExecutionState.POWER_LOSS:
                 return (
@@ -204,8 +209,11 @@ class CommandEngine:
         if self.manual_stop:
             return ExecutionState.STOP_MANUAL
 
-        if not self.power.is_power_available():
+        if self.saftey_policy_manager.is_power_locked():
             return ExecutionState.POWER_LOSS
+
+        if self.saftey_policy_manager.is_dry_run_locked():
+            return ExecutionState.DRY_RUN
 
         if (
             cmd.ctype != CommandType.AUTO_ON
@@ -391,11 +399,13 @@ class ExecutionState(Enum):
     RUNNING = auto()
     COMPLETED = auto()
     STOP_MANUAL = auto()
+    DRY_RUN =  auto()
     POWER_LOSS = auto()
 
 
 class ExecutionResult(Enum):
     COMPLETED = auto()
     STOP_MANUAL = auto()
+    DRY_RUN = auto()
     POWER_LOSS = auto()
     ERROR = auto()

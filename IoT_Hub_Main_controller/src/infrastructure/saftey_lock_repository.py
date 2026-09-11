@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app import db
-from database.models.saftey_lock import SafetyLock, SafetyLockStatus
+from database.models.saftey_lock import SafetyLock, SafetyLockStatus, SafetyLockType
 
 
 
@@ -67,4 +67,55 @@ class SafetyLockRepository:
 
             lock.retry_count += 1
 
+            db.session.commit()
+
+    def create_dry_run_lock(
+        self,
+        valid_until,
+        reason,
+        ):
+
+        with self.app.app_context():
+
+            start_of_day = datetime.utcnow().replace(
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+
+            last_lock = (
+                SafetyLock.query
+                .filter(
+                    SafetyLock.lock_type
+                    == SafetyLockType.DRY_RUN.value,
+                    SafetyLock.created_at >= start_of_day,
+                )
+                .order_by(
+                    SafetyLock.created_at.desc()
+                )
+                .first()
+            )
+
+            retry_count = (
+                last_lock.retry_count + 1
+                if last_lock
+                else 1
+            )
+
+            lock = SafetyLock(
+                lock_type=SafetyLockType.DRY_RUN.value,
+                valid_until=valid_until,
+                retry_count=retry_count,
+                reason=reason,
+            )
+
+            db.session.add(lock)
+            db.session.commit()
+
+            return lock
+
+    def save(self, lock):
+        with self.app.app_context():
+            db.session.merge(lock)
             db.session.commit()

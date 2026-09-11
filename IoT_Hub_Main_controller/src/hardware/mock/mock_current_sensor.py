@@ -10,6 +10,7 @@ class MockCurrentSensor:
 
     def set_mode(self, mode):
         self.mode = mode
+        print(f" mode set to {self.mode}")
 
     def get_mode(self):
         return self.mode

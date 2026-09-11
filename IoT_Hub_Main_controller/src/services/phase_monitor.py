@@ -5,9 +5,10 @@ from datetime import datetime
 from logging_config import logger
 
 class PhaseMonitor:
-    def __init__(self, gpio_reader, repository,event_emitter, poll_interval=1):
+    def __init__(self, gpio_reader, repository,event_emitter,saftey_policy_manager, poll_interval=1):
         self.gpio = gpio_reader
         self.repo = repository
+        self.saftey_policy_manager = saftey_policy_manager
         self.event_emitter = event_emitter
         self.poll_interval = poll_interval
         self.logger = logger
@@ -87,8 +88,10 @@ class PhaseMonitor:
             })
 
         if green:
+            self.saftey_policy_manager.handle_power_restored()
             self.event_emitter.emit(event_type  = "POWER_RESTORED")
         else:
+            self.saftey_policy_manager.handle_power_lost()
             self.event_emitter.emit(event_type = "POWER_LOST")
 
         

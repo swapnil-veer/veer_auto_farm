@@ -119,14 +119,20 @@ def compose_application(app):
     # -------------------------
     event_logger = EventLoggingHandler()
     system_state = SystemState()
+
+    saftey_policy = SafetyPolicyManager(
+        safety_lock_repo=saftey_lock_repo,
+        event_emitter=event_emitter,
+    )
+
     pump_service = PumpService(pump_gpio, pump_repo, pump_id)
     # pump_context = PumpContextManager(pump_service)
 
 
-
     phase_monitor = PhaseMonitor(
         gpio_reader=phase_gpio,
-        repository=phase_repo, 
+        repository=phase_repo,
+        saftey_policy_manager = saftey_policy,
         event_emitter = event_emitter,
         poll_interval=1,
     )
@@ -154,15 +160,12 @@ def compose_application(app):
     current_monitor = CurrentMonitoringService(
         sensor = current_sensor,
         current_repo = current_repo,
+        saftey_policy_manager = saftey_policy,
         event_emitter = event_emitter,
           
     )
 
-    saftey_policy = SafetyPolicyManager(
-        command_repo=command_repo,
-        safety_lock_repo=saftey_lock_repo,
-        event_emitter=event_emitter,
-    )
+
 
     # -------------------------
     # Command orchestration
@@ -171,8 +174,8 @@ def compose_application(app):
         # pump_context_manager=pump_context,
         pump_service = pump_service,
         current_monitor=current_monitor,
-        power_service=power_service,
         command_repo=command_repo,
+        saftey_policy_manager = saftey_policy,
         system_state = system_state,
         event_emitter=event_emitter,
     )
@@ -180,7 +183,6 @@ def compose_application(app):
     scheduler = CommandScheduler(
         engine=command_engine,
         command_repo=command_repo,
-        saftey_lock_repo=saftey_lock_repo,
         saftey_policy_manager=saftey_policy,
         poll_interval=60,
     )
@@ -196,7 +198,6 @@ def compose_application(app):
     event_emitter.register(system_state.handle_event)
     event_emitter.register(event_logger.handle_event)
     event_emitter.register(lcd_service.handle_event)
-    event_emitter.register(saftey_policy.handle_event)
 
     # -------------------------
     # Start background workers
