@@ -13,12 +13,7 @@ class PhaseMonitor:
         self.poll_interval = poll_interval
         self.logger = logger
 
-        self._state = {
-        "green_led": False,
-        "yellow_led": False,
-        "red_led": False,
-        "timestamp": datetime.utcnow(),
-        }
+        self.get_initial_state()
 
         self._lock = threading.Lock()
 
@@ -39,7 +34,6 @@ class PhaseMonitor:
 
     def is_power_available(self) -> bool:
         with self._lock:
-            return True
             return self._state["green_led"]
 
     def get_status(self) -> str:
@@ -101,3 +95,16 @@ class PhaseMonitor:
 
         # Persist (side effect)
         self.repo.save(green, yellow, red, now)
+
+    def get_initial_state(self):
+        inital = self.gpio.read()
+
+        self._state = {
+        "green_led": inital["green"],
+        "yellow_led": inital["yellow"],
+        "red_led": inital["red"],
+        "timestamp": datetime.utcnow(),
+        }
+
+        if not inital["green"]:
+            self.saftey_policy_manager.handle_power_lost()

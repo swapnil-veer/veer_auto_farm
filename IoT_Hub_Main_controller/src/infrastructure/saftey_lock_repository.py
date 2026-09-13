@@ -113,9 +113,14 @@ class SafetyLockRepository:
             db.session.add(lock)
             db.session.commit()
 
-            return lock
+            return lock._to_dict()
 
     def save(self, lock):
         with self.app.app_context():
             db.session.merge(lock)
+            db.session.commit()
+
+    def update(self, lock_id: int, **updates):
+        with self.app.app_context():
+            SafetyLock.query.filter_by(id=lock_id).update(updates)
             db.session.commit()

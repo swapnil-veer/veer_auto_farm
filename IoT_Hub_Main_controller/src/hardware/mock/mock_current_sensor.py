@@ -24,9 +24,9 @@ class MockCurrentSensor:
             return 2.0
 
         if self.mode == self.MOTOR_STOPPED:
-            return 0.0
+            return 1
 
         if self.mode == self.STOP_FAILURE:
             return 4.5
 
-        return 0.0
+        # return 0.0

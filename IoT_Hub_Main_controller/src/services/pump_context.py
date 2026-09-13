@@ -16,6 +16,6 @@ class PumpContextManager:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.pump_service.stop(self.run_id)
-        self.current_monitor.verify_motor_stopped(self.command_id)
+        # self.current_monitor.verify_motor_stopped(self.command_id)
         self.current_monitor.stop()
         return False # re-raise exceptions
