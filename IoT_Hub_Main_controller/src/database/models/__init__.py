@@ -9,4 +9,5 @@ from .phase_log import PhaseLog  # noqa
 from .event import Event  # noqa
 from .pump import Pump
 from .gpio_config import GpioConfig
-
+from .modules import Module
+from .module_setting import ModuleSetting

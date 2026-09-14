@@ -14,6 +14,7 @@ from infrastructure.phase_repository import PhaseRepository
 from infrastructure.user_repository import UserRepository
 from infrastructure.current_reading_repository import CurrentReadingRepository
 from infrastructure.saftey_lock_repository import SafetyLockRepository
+from infrastructure.module_configuration_repository import ModuleConfigurationRepository
 
 # Hardware
 APP_MODE = os.getenv("APP_MODE", "prod")
@@ -45,6 +46,11 @@ from services.lcd_service import LCDService
 from services.current_monitoring_service import CurrentMonitoringService
 from services.saftey_policy_manager import SafetyPolicyManager
 from services.system_state import SystemState
+from services.module_configuration_service import ModuleConfigurationService, ModuleType
+
+# Null services
+from services.null_services.null_current_monitoring_service import NullCurrentMonitoringService
+from services.null_services.null_lcd_service import NullLCDService
 
 # Controller
 from main_controller import MainController
@@ -54,10 +60,14 @@ class ApplicationContext:
     Holds references to all long-lived services.
     Useful for startup, shutdown, and diagnostics.
     """
-    def __init__(self, app, scheduler, sim_service, phase_monitor, system_state, pump_service, 
+    def __init__(self, app, 
+                 module_configuration_service,
+                 scheduler, sim_service, phase_monitor, system_state, pump_service, 
                  phase_gpio, sim_modem, lcd_driver, current_sensor,
-                 sms_repo,):
+                 sms_repo,
+                 ):
         self.app = app
+        self.module_configuration_service = module_configuration_service
         self.scheduler = scheduler
         self.sim_service = sim_service
         self.phase_monitor = phase_monitor
@@ -89,6 +99,7 @@ def compose_application(app):
     # -------------------------
     # Repositories (DB)
     # -------------------------
+    module_configuration_repo = ModuleConfigurationRepository(app)
     command_repo = CommandRepository(app)
     pump_repo = PumpRepository(app)
     sms_repo = SMSRepository(app)
@@ -96,6 +107,12 @@ def compose_application(app):
     user_repo = UserRepository(app)
     current_repo = CurrentReadingRepository(app)
     saftey_lock_repo = SafetyLockRepository(app)
+
+    module_configuration_service = ModuleConfigurationService(module_configuration_repo)
+
+    # Check hardware availabilty
+    lcd_enabled = module_configuration_service.is_enabled(ModuleType.LCD)
+    current_monitor_enabled = module_configuration_service.is_enabled(ModuleType.CURRENT_MONITOR)
 
     # -------------------------
     # Hardware adapters
@@ -108,8 +125,18 @@ def compose_application(app):
     pump_gpio = provider.get_pump_gpio(gpio, pump_pin)
     phase_gpio = provider.get_phase_gpio()
     sim_modem = provider.get_sim()
-    lcd_driver = provider.get_lcd()
-    current_sensor = provider.get_current_sensor()
+
+    if current_monitor_enabled:
+        current_sensor = provider.get_current_sensor()
+    else:
+        current_sensor = provider.get_current_sensor()
+
+
+    if lcd_enabled:
+        lcd_driver = provider.get_lcd()
+    else:
+        lcd_driver = None
+
 
     # emmitter
     event_emitter = CommandEventEmitter()
@@ -156,14 +183,17 @@ def compose_application(app):
     # -------------------------
     # Voluntary Services
     # -------------------------
+    if current_monitor_enabled:
+        current_monitor = CurrentMonitoringService(
+            sensor = current_sensor,
+            current_repo = current_repo,
+            saftey_policy_manager = saftey_policy,
+            event_emitter = event_emitter,
+            
+        )
+    else:
+        current_monitor = NullCurrentMonitoringService()
 
-    current_monitor = CurrentMonitoringService(
-        sensor = current_sensor,
-        current_repo = current_repo,
-        saftey_policy_manager = saftey_policy,
-        event_emitter = event_emitter,
-          
-    )
 
 
 
@@ -190,10 +220,13 @@ def compose_application(app):
     # -------------------------
     # Voluntary Services
     # -------------------------
-    lcd_service = LCDService(
-        lcd_driver=lcd_driver,
-        system_state=system_state,
-    )
+    if lcd_enabled:
+        lcd_service = LCDService(
+            lcd_driver=lcd_driver,
+            system_state=system_state,
+        )
+    else:
+        lcd_service = NullLCDService()
 
     event_emitter.register(system_state.handle_event)
     event_emitter.register(event_logger.handle_event)
@@ -232,6 +265,7 @@ def compose_application(app):
 
     return ApplicationContext(
         app=app,
+        module_configuration_service=module_configuration_service,
         scheduler=scheduler,
         sim_service=sim_service,
         phase_monitor=phase_monitor,
