@@ -8,11 +8,12 @@ from logging_config import logger
 
 class LCDService:
 
-    def __init__(self,lcd_driver, system_state, poll_interval=1,):
+    def __init__(self,lcd_driver, system_state, poll_interval=1, config=None):
         self.lcd = lcd_driver
         self.system_state = system_state
         self.logger = logger
         self.poll_interval = poll_interval
+        self.config = config
 
         self.last_lines = ["", "", "", ""]
         self.last_signal_bars = None
@@ -71,7 +72,13 @@ class LCDService:
         elif event_type == "SMS_RECEIVED":
             self._set_event("SMS Received")
 
-    def _set_event(self, msg, duration=10):
+    def _set_event(self, msg, duration=None):
+        if duration is None:
+            duration = (
+                self.config.lcd_event_timeout_sec
+                if self.config
+                else 10
+            )
         with self.event_lock:
             self.event_message = msg[:20]
             self.event_expiry = time.time() + duration

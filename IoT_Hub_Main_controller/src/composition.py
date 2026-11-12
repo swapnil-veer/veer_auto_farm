@@ -46,7 +46,8 @@ from services.lcd_service import LCDService
 from services.current_monitoring_service import CurrentMonitoringService
 from services.saftey_policy_manager import SafetyPolicyManager
 from services.system_state import SystemState
-from services.module_configuration_service import ModuleConfigurationService, ModuleType
+from services.module_configuration_service import ModuleConfigurationService
+from config.config_loader import load_config
 
 # Null services
 from services.null_services.null_current_monitoring_service import NullCurrentMonitoringService
@@ -109,10 +110,11 @@ def compose_application(app):
     saftey_lock_repo = SafetyLockRepository(app)
 
     module_configuration_service = ModuleConfigurationService(module_configuration_repo)
+    config = load_config(module_configuration_service)
 
-    # Check hardware availabilty
-    lcd_enabled = module_configuration_service.is_enabled(ModuleType.LCD)
-    current_monitor_enabled = module_configuration_service.is_enabled(ModuleType.CURRENT_MONITOR)
+    # Use the startup configuration snapshot for hardware and services.
+    lcd_enabled = config.lcd_enabled
+    current_monitor_enabled = config.current_monitor_enabled
 
     # -------------------------
     # Hardware adapters
@@ -133,7 +135,7 @@ def compose_application(app):
 
 
     if lcd_enabled:
-        lcd_driver = provider.get_lcd()
+        lcd_driver = provider.get_lcd(config.lcd_i2c_address)
     else:
         lcd_driver = None
 
@@ -150,6 +152,7 @@ def compose_application(app):
     saftey_policy = SafetyPolicyManager(
         safety_lock_repo=saftey_lock_repo,
         event_emitter=event_emitter,
+        config=config,
     )
 
     pump_service = PumpService(pump_gpio, pump_repo, pump_id)
@@ -189,7 +192,7 @@ def compose_application(app):
             current_repo = current_repo,
             saftey_policy_manager = saftey_policy,
             event_emitter = event_emitter,
-            
+            config=config,
         )
     else:
         current_monitor = NullCurrentMonitoringService()
@@ -224,6 +227,8 @@ def compose_application(app):
         lcd_service = LCDService(
             lcd_driver=lcd_driver,
             system_state=system_state,
+            poll_interval=config.lcd_refresh_interval_sec,
+            config=config,
         )
     else:
         lcd_service = NullLCDService()

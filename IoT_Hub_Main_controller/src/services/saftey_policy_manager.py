@@ -11,23 +11,23 @@ from logging_config import logger
 
 class SafetyPolicyManager:
 
-    DEFAULT_RETRY_HOURS = 0.01
-    MAX_RETRIES = 100
 
     def __init__(
         self,
         safety_lock_repo,
         event_emitter,
+        config,
     ):
         self.safety_lock_repo = safety_lock_repo
         self.event_emitter = event_emitter
+        self.config = config
 
         self.logger = logger
         self.logger.info("SafetyPolicyManager initialized")
 
 
     def handle_dry_run(self):
-        retry_at = (datetime.utcnow() + timedelta(hours=self.DEFAULT_RETRY_HOURS))
+        retry_at = (datetime.utcnow() + timedelta(hours=self.config.retry_hours))
 
         lock = self.safety_lock_repo.create_dry_run_lock(
                     valid_until=retry_at,
@@ -37,7 +37,7 @@ class SafetyPolicyManager:
 
         self.logger.debug(f"Dry run lock created: {lock}")
 
-        if lock["retry_count"] <= SafetyPolicyManager.MAX_RETRIES:
+        if lock["retry_count"] <= self.config.max_retries:
             return
 
         end_of_day = datetime.utcnow().replace(

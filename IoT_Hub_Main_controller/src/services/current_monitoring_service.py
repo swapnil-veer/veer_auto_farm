@@ -9,13 +9,6 @@ class CurrentMonitoringService:
 
     RAW_SAMPLE_COUNT = 3
 
-    DRY_RUN_THRESHOLD_AMP = 5.0
-
-    DRY_RUN_WINDOWS = 2
-
-    MOTOR_STOP_THRESHOLD_AMP = 1.0
-
-    MOTOR_STOP_DELAY_SEC = 2
 
     def __init__(
         self,
@@ -23,11 +16,13 @@ class CurrentMonitoringService:
         current_repo,
         saftey_policy_manager,
         event_emitter,
+        config,
     ):
         self.sensor = sensor
         self.current_repo = current_repo
         self.saftey_policy_manager = saftey_policy_manager
         self.event_emitter = event_emitter
+        self.config = config
 
         self._running = False
         self._thread = None
@@ -71,7 +66,7 @@ class CurrentMonitoringService:
 
         samples = []
 
-        for _ in range(self.RAW_SAMPLE_COUNT):
+        for _ in range(self.config.raw_sample_count):
 
             samples.append(self.sensor.read_amp())
 
@@ -96,21 +91,21 @@ class CurrentMonitoringService:
 
             self._check_dry_run()
 
-            time.sleep(self.SAMPLE_INTERVAL_SEC)
+            time.sleep(self.config.sample_interval_sec)
 
     # ----------------------------------
     # Dry Run Detection
     # ----------------------------------
 
     def _check_dry_run(self):
-        snapshots = (self.current_repo.get_last_n(self.DRY_RUN_WINDOWS))
+        snapshots = (self.current_repo.get_last_n(self.config.dry_run_window_count))
 
         if (len(snapshots)< self.DRY_RUN_WINDOWS):
             return
 
         below_threshold = all(
             snapshot.reading_amp
-            <= self.DRY_RUN_THRESHOLD_AMP
+            <= self.config.dry_run_threshold_amp
             for snapshot in snapshots
         )
 
@@ -126,7 +121,7 @@ class CurrentMonitoringService:
 
     def verify_motor_stopped(self,command_id:int):
 
-        time.sleep(self.MOTOR_STOP_DELAY_SEC)
+        time.sleep(self.config.motor_stop_delay_sec)
 
         samples = []
 
@@ -136,7 +131,7 @@ class CurrentMonitoringService:
 
         avg_current = mean(samples)
 
-        if (avg_current<= self.MOTOR_STOP_THRESHOLD_AMP):
+        if (avg_current<= self.config.motor_stop_threshold_amp):
             self.event_emitter.emit("MOTOR_STOP_VERIFIED",
                 {
                     "command_id": command_id,

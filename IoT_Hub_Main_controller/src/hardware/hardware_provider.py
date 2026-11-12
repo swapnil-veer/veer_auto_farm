@@ -49,7 +49,7 @@ class HardwareProvider:
             return MockCurrentSensor(*args)
         return CurrentSensor()
 
-    def get_lcd(self):
+    def get_lcd(self, i2c_address=0x27):
         if self.mode == "SIMULATOR":
             return MockLCD()
-        return LCDDriver()
+        return LCDDriver(i2c_address=i2c_address)
